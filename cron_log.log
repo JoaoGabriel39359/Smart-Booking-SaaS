@@ -1,0 +1,101 @@
+--- Iniciando Cron Job: 27/02/2026 15:26:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 15:27:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 15:28:02 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 15:29:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 15:30:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 15:40:01 ---
+--- Processamento concluído ---
+
+--- DEBUG: Iniciando Cron Job: 27/02/2026 15:50:01 ---
+DEBUG: Janela de busca: 16:05:01 até 16:15:01
+DEBUG: Encontrei 6 aulas registradas para hoje no banco.
+
+--- Verificando Aula ID 15 (Junin) ---
+    Horário: 13:00:00
+    Status Atual: 'StatusAula.presente' (Esperado: 'marcada')
+    Já enviado antes? False
+    FILTROS: Janela=False | Status=False | Pendente=True
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Verificando Aula ID 14 (Junin) ---
+    Horário: 11:00:00
+    Status Atual: 'StatusAula.cancelado' (Esperado: 'marcada')
+    Já enviado antes? False
+    FILTROS: Janela=False | Status=False | Pendente=True
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Verificando Aula ID 18 (João ) ---
+    Horário: 18:00:00
+    Status Atual: 'StatusAula.cancelado' (Esperado: 'marcada')
+    Já enviado antes? False
+    FILTROS: Janela=False | Status=False | Pendente=True
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Verificando Aula ID 9 (João ) ---
+    Horário: 15:28:09
+    Status Atual: 'StatusAula.marcada' (Esperado: 'marcada')
+    Já enviado antes? True
+    FILTROS: Janela=False | Status=False | Pendente=False
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Verificando Aula ID 10 (João ) ---
+    Horário: 15:33:24
+    Status Atual: 'StatusAula.marcada' (Esperado: 'marcada')
+    Já enviado antes? False
+    FILTROS: Janela=False | Status=False | Pendente=True
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Verificando Aula ID 8 (João ) ---
+    Horário: 15:51:08
+    Status Atual: 'StatusAula.marcada' (Esperado: 'marcada')
+    Já enviado antes? True
+    FILTROS: Janela=False | Status=False | Pendente=False
+    X Ignorada: Esta aula não cumpre todos os requisitos acima.
+
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:00:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:10:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:20:02 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:30:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:40:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 16:50:02 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 17:00:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 17:10:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 17:20:02 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 17:30:01 ---
+Traceback (most recent call last):
+  File "/home/joao-gabriel/Downloads/agenda_saas/cron_alertas.py", line 101, in <module>
+    rodar_cron_completo()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/joao-gabriel/Downloads/agenda_saas/cron_alertas.py", line 86, in rodar_cron_completo
+    f"Caso precise, acesse seu portal: {link_portal}\n\n"
+                                        ^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'link_portal' where it is not associated with a value
+--- Iniciando Cron Job: 27/02/2026 17:40:01 ---
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 17:50:02 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 12:50 até 22:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:00:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:00 até 23:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:10:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:10 até 23:10
+--- Processamento concluído ---

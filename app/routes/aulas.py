@@ -1,11 +1,12 @@
 import traceback
-from fastapi import APIRouter, HTTPException, Depends # Adicionado Depends
-from sqlalchemy.orm import Session # Adicionado Session
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.services.whatsapp import enviar_whatsapp
-from app.database import SessionLocal, get_db # Adicionado get_db
+from app.database import SessionLocal, get_db
 from app.services.google_calendar import criar_evento, remover_evento_google
-from app import models # Importa o módulo models inteiro para facilitar
-from app.models import Aluno, Aula, GradeProfessor, StatusAula
+from app import models
+from app.models import Aluno, Aula, GradeProfessor, StatusAula, TipoAluno # Importado TipoAluno
 from datetime import datetime, timedelta, time
 
 TELEFONE_PROFESSOR = "5524998739359"
@@ -98,47 +99,42 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
                 credito_para_consumir = db.query(Aula).filter(
                     Aula.aluno_id == p.id,
                     Aula.status == "cancelado",
-                    # Mudamos aqui para garantir que ele ache os cancelados
                     Aula.validade_reposicao >= datetime.now()
                 ).order_by(Aula.validade_reposicao.asc()).first()
                 
                 if credito_para_consumir:
                     data_validade = credito_para_consumir.validade_reposicao
-                    
-                    # === A TROCA É AQUI ===
-                    # Em vez de "reposicao_usada", usamos um valor que o seu Enum já aceita.
-                    # Se no seu models.py o Enum tem 'presente', 'ausente', etc, use um deles.
                     credito_para_consumir.status = "presente" 
-                    # ======================
 
             nova = Aula(
                 aluno_id=p.id,
                 data_inicio=inicio,
                 data_fim=fim,
-                status="marcada", # Status da aula NOVA
+                status="marcada", 
                 google_event_id=g_id,
                 eh_reposicao=eh_reposicao,
-                validade_reposicao=data_validade 
+                validade_reposicao=data_validade,
+                lembrete_enviado=False # Inicializa como falso
             )
-
             novas_aulas.append(nova)
 
         db.add_all(novas_aulas)
         db.commit()
 
-        # 7. Notificações WhatsApp
-        try:
-            msg_professor = f"📢 *Nova Aula Agendada!*\n\nAlunos: {', '.join([p.nome for p in lista_alunos])}\nData: {inicio.strftime('%d/%m às %H:%M')}"
-            enviar_whatsapp(TELEFONE_PROFESSOR, msg_professor)
-            
-            for p in lista_alunos:
-                tipo_msg = "REPOSIÇÃO" if eh_reposicao else "AULA REGULAR"
-                msg_aluno = f"Olá {p.nome}! ✅\nSua *{tipo_msg}* de {inicio.strftime('%d/%m às %H:%M')} foi agendada!"
-                enviar_whatsapp(p.telefone, msg_aluno)
-        except Exception as we:
-            print(f"DEBUG: Falha WhatsApp: {we}")
+        # === NOVIDADE: Enviar WhatsApp de Confirmação ===
+        for aula_criada in novas_aulas:
+            try:
+                msg_confirmacao = (
+                    f"Agendado com sucesso, {aula_criada.aluno.nome}! ✅\n\n"
+                    f"Sua aula será dia {aula_criada.data_inicio.strftime('%d/%m')} "
+                    f"às {aula_criada.data_inicio.strftime('%H:%M')}.\n"
+                    f"{'★ Aula de Reposição' if eh_reposicao else ''}"
+                )
+                enviar_whatsapp(aula_criada.aluno.telefone, msg_confirmacao)
+            except Exception as e:
+                print(f"Erro ao avisar aluno no Zap: {e}")
 
-        return {"msg": "Aula agendada com sucesso!"}
+        return {"status": "sucesso", "event_id": g_id}
 
     except HTTPException as http_e:
         raise http_e
@@ -220,7 +216,7 @@ def listar_aulas():
 from sqlalchemy import func
 
 @router.get("/horarios-livres")
-def horarios_livres(data: str, aluno_id: int = None): # Adicionamos o aluno_id opcional
+def horarios_livres(data: str, token: str = None, db: Session = Depends(get_db)):
     db = SessionLocal()
 
     try:
@@ -230,8 +226,8 @@ def horarios_livres(data: str, aluno_id: int = None): # Adicionamos o aluno_id o
         raise HTTPException(status_code=400, detail="Formato de data inválido")
 
     # --- NOVO: VERIFICAR SE A TURMA DO ALUNO JÁ TEM AULA ---
-    if aluno_id:
-        aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
+    if token:
+        aluno = db.query(Aluno).filter(Aluno.token_acesso == token).first()
         if aluno and aluno.turma_id:
             # Busca se existe alguma aula marcada para qualquer aluno desta mesma turma neste dia
             aula_turma = db.query(Aula).join(Aluno).filter(
@@ -302,14 +298,18 @@ def horarios_livres(data: str, aluno_id: int = None): # Adicionamos o aluno_id o
 # ==============================
 # Mantenha seus imports originais no topo
 
-@router.post("/aulas/{aula_id}/cancelar")
-def cancelar_aula(aula_id: int, db: Session = Depends(get_db)):
+@router.post("/{aula_id}/cancelar/{token}")
+def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)): # <--- ADICIONEI 'token: str' AQUI
     agora = datetime.now()
     
-    # 1. Busca a aula específica
-    aula = db.query(Aula).filter(Aula.id == aula_id).first()
+    # 1. Busca a aula específica (Alterado para validar o TOKEN)
+    aula = db.query(Aula).join(Aluno).filter(
+        Aula.id == aula_id,
+        Aluno.token_acesso == token # <--- ADICIONEI ESTA LINHA AQUI
+    ).first()
+    
     if not aula:
-        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+        raise HTTPException(status_code=404, detail="Aula não encontrada ou acesso negado.")
 
     aluno = aula.aluno
     inicio_aula = aula.data_inicio
@@ -348,7 +348,7 @@ def cancelar_aula(aula_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     # 5. Notificação WhatsApp (Personalizada com a validade)
-    link_portal = f"https://pseudoheroic-semispontaneous-gerda.ngrok-free.dev/portal/{aluno.id}"
+    link_portal = f"https://pseudoheroic-semispontaneous-gerda.ngrok-free.dev/portal/{aluno.token_acesso}"
     
     if gera_reposicao:
         msg = (

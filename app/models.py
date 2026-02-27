@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum
 from sqlalchemy.orm import relationship
 import enum
@@ -22,6 +23,7 @@ class Aluno(Base):
     sobrenome = Column(String, nullable=False)
     telefone = Column(String, nullable=False)
     email = Column(String, unique=True, index=True)
+    token_acesso = Column(String, default=lambda: str(uuid.uuid4()), unique=True)
     
     endereco = Column(String, nullable=True)
     cidade = Column(String, nullable=True)

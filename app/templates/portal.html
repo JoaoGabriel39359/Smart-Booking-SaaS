@@ -29,6 +29,20 @@
     </style>
 </head>
 <body class="antialiased">
+    <script>
+        const ALUNO_TOKEN = "{{ aluno.token }}";
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('sucesso')) {
+                const modal = new bootstrap.Modal(document.getElementById('modalSucesso'));
+                document.getElementById('msgSucesso').innerText = "Sua aula foi reagendada com sucesso!";
+                modal.show();
+            }
+        });
+    </script>
 
     <div class="max-w-lg mx-auto px-6 py-12">
         
@@ -135,7 +149,7 @@
     <script>
         let horarioSelecionado = null;
         const alunoId = '{{ aluno.id }}';
-        // REMOVIDO .name ABAIXO TAMBÉM
+        const alunoToken = '{{ aluno.token }}';
         const tipoAluno = '{{ aluno.tipo }}'; 
 
         async function buscarHorarios() {
@@ -180,24 +194,50 @@
         }
 
         async function confirmarAgendamento() {
+            // 1. Verificações básicas
             if (tipoAluno !== 'VIP') return;
             
-            const dataInput = document.getElementById('data').value;
-            const dataFormatada = dataInput.split('-').reverse().join('-'); 
+            const dataInput = document.getElementById('data').value; // Formato YYYY-MM-DD
+            if (!dataInput || !horarioSelecionado) {
+                alert("Por favor, selecione uma data e um horário.");
+                return;
+            }
+
+            // 2. Preparar os dados para a rota @app.post("/reagendar/{token}")
+            // O FastAPI espera 'aula_id' e 'nova_data' via Form (FormData)
+            const formData = new FormData();
             
-            const url = `/aulas/marcar?aluno_id=${alunoId}&data=${dataFormatada}&hora=${horarioSelecionado}&eh_reposicao=true`;
+            formData.append('aula_id', 0);
+            // IMPORTANTE: Aqui você precisa do ID da aula que está sendo substituída.
+            // Se você não tiver esse ID fácil, podemos enviar apenas o token e a nova data.
+            // Mas conforme nossa rota no main.py, vamos enviar assim:
+            formData.append('nova_data', `${dataInput}T${horarioSelecionado}`);
             
+            // Se o seu portal apenas CRIA uma nova aula de reposição (sem cancelar uma antiga no mesmo clique):
+            // Você pode usar a rota de marcar normal, mas sempre passando o TOKEN.
+            const url = `/reagendar/${alunoToken}`; // 'alunoToken' deve vir do seu {{ aluno.token }}
+
             try {
-                const res = await fetch(url, { method: 'POST' });
-                if(res.ok) {
+                const res = await fetch(`/reagendar/${alunoToken}`, { 
+                    method: 'POST',
+                    body: formData 
+                });
+
+                // Se o servidor responder com RedirectResponse (303), o res.redirected será true
+                if (res.redirected) {
+                    window.location.href = res.url; // Isso ativa o modal de sucesso via URL param
+                    return;
+                }
+
+                if (res.ok) {
                     document.getElementById('msgSucesso').innerText = "Sua nova aula foi agendada com sucesso!";
                     new bootstrap.Modal(document.getElementById('modalSucesso')).show();
                 } else {
-                    const erro = await res.json();
-                    alert(erro.detail || "Erro ao agendar.");
+                    const textoErro = await res.text();
+                    alert(textoErro || "Erro ao agendar.");
                 }
             } catch (e) {
-                alert("Falha de conexão.");
+                alert("Falha de conexão com o servidor.");
             }
         }
 
@@ -205,7 +245,7 @@
             if (tipoAluno !== 'VIP') return;
 
             if(confirm("Deseja cancelar esta aula? Se feito com antecedência, você recebe o crédito de volta.")) {
-                const res = await fetch(`/aulas/aulas/${id}/cancelar`, { method: 'POST' });
+                const res = await fetch(`/aulas/${id}/cancelar/${alunoToken}`, { method: 'POST' });
                 if(res.ok) {
                     location.reload();
                 } else {
