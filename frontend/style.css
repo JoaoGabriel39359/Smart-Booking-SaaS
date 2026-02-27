@@ -1,0 +1,98 @@
+/* Customizações de Grid e Calendário */
+.calendario-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background-color: #e2e8f0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+/* Efeito para o nome do aluno ser clicável no histórico */
+.cursor-pointer:hover {
+    filter: brightness(0.8); /* Dá uma leve escurecida no nome */
+    transition: all 0.2s;
+}
+
+.dia-selecionado {
+    border: 2px solid #2563eb !important;
+    background-color: #eff6ff !important;
+}
+
+/* Scrollbar Personalizada */
+.custom-scroll::-webkit-scrollbar { width: 4px; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+/* Componentes Reutilizáveis */
+.card {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    border: 1px solid #e2e8f0;
+}
+
+.grid-layout {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .grid-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Inputs do SweetAlert e Gerais */
+.swal2-input-custom, .input-field {
+    width: 100%;
+    padding: 0.6rem 1rem;
+    margin: 0.5rem 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+}
+
+/* Botões e Tabs */
+.tab-btn {
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    white-space: nowrap;
+    color: #475569;
+}
+
+.tab-btn.active {
+    background-color: white;
+    color: #2563eb;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.btn-primary {
+    background-color: #2563eb;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+}
+
+.btn-purple {
+    background-color: #9333ea;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+}
+
+.btn-blue {
+    background-color: #2563eb;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    transition: background-color 0.2s;
+}
+
+.btn-blue:hover { background-color: #1d4ed8; }
