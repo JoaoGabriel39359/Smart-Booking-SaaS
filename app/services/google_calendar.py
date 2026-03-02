@@ -8,9 +8,13 @@ import os
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = os.getcwd()
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+
+print(f"DEBUG: Procurando credenciais em: {CREDENTIALS_PATH}")
+if not os.path.exists(CREDENTIALS_PATH):
+    print("⚠️ AVISO: credentials.json NÃO ENCONTRADO!")
 
 # ==============================
 # CONEXÃO
