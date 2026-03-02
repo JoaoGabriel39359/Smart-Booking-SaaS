@@ -16,6 +16,7 @@ import os
 
 # Cria as tabelas no banco
 Base.metadata.create_all(bind=engine)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,9 +37,9 @@ app = FastAPI(
 )
 
 # Configurações de Pastas
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
-templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "app", "static")), name="static")
+app.mount("/frontend", StaticFiles(directory=os.path.join(BASE_DIR, "frontend")), name="frontend")
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "app", "templates"))
 
 # Inclusão de Rotas
 app.include_router(turmas.router)
@@ -59,7 +60,8 @@ def home():
 # Painel do Professor 
 @app.get("/painel")
 async def painel():
-    return FileResponse("frontend/index.html")
+    caminho_index = os.path.join(BASE_DIR, "frontend", "index.html")
+    return FileResponse(caminho_index)
 
 # NOVO PORTAL DO ALUNO (Unificado: Ver, Cancelar e Agendar)
 @app.get("/portal/{token}", response_class=HTMLResponse)
