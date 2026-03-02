@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
-from app.services.whatsapp import enviar_boas_vindas_whatsapp
+from app.services.whatsapp import enviar_whatsapp
 from app.database import SessionLocal, get_db
 from sqlalchemy.orm import Session
 from app.models import Aluno, Turma
