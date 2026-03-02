@@ -74,8 +74,17 @@ def home():
 @app.get("/painel")
 async def painel():
     caminho_index = os.path.join(BASE_DIR, "frontend", "index.html")
+    
+    # Se o arquivo não existir, o Render vai nos dizer EXATAMENTE onde ele procurou
     if not os.path.exists(caminho_index):
-        return {"erro": f"Arquivo index.html não encontrado em: {caminho_index}"}
+        # Lista os arquivos da raiz para a gente ver o que tem lá
+        arquivos_na_raiz = os.listdir(BASE_DIR)
+        return {
+            "erro": "Arquivo não encontrado",
+            "onde_procurei": caminho_index,
+            "arquivos_que_existem_na_raiz": arquivos_na_raiz
+        }
+    
     return FileResponse(caminho_index)
 
 # ... (restante do código do portal e reagendamento continua igual)
