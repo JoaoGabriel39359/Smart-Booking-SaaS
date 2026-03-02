@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Depends, Form
+from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from app.services.google_calendar import criar_evento, remover_evento_google
@@ -10,16 +11,33 @@ from app import models
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.services.lembretes import verificar_lembretes
 from datetime import datetime, timedelta
+from fastapi.staticfiles import StaticFiles
 import os
 
 # Cria as tabelas no banco
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Agenda SaaS")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: O que o sistema faz ao ligar
+    print("🚀 Sistema Agenda SaaS Iniciado")
+    if not scheduler.running:
+        scheduler.start()
+    yield
+    # Shutdown: O que o sistema faz ao desligar
+    print("🛑 Sistema Encerrado")
+    if scheduler.running:
+        scheduler.shutdown()
+
+# JUNTE AS CONFIGURAÇÕES AQUI:
+app = FastAPI(
+    title="Agenda SaaS", 
+    lifespan=lifespan
+)
 
 # Configurações de Pastas
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-# Define onde estão os seus arquivos HTML (coloque o portal.html dentro de app/templates)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 templates = Jinja2Templates(directory="app/templates")
 
 # Inclusão de Rotas
@@ -30,15 +48,7 @@ app.include_router(webhook.router)
 
 # --- SCHEDULER (Lembretes) ---
 scheduler = BackgroundScheduler()
-@app.on_event("startup")
-def start_scheduler():
-    if not scheduler.running:
-        scheduler.add_job(verificar_lembretes, "interval", minutes=30) # Aumentado para 30min para poupar recursos
-        scheduler.start()
-
-@app.on_event("shutdown")
-def shutdown_scheduler():
-    scheduler.shutdown()
+scheduler.add_job(verificar_lembretes, 'interval', minutes=1)
 
 # --- ROTAS DE PÁGINAS (FRONTEND) ---
 
@@ -46,7 +56,7 @@ def shutdown_scheduler():
 def home():
     return {"status": "SaaS de Agenda Online Rodando"}
 
-# Painel do Professor (Continua estático como você deixou)
+# Painel do Professor 
 @app.get("/painel")
 async def painel():
     return FileResponse("frontend/index.html")
@@ -67,21 +77,19 @@ async def pagina_portal_aluno(token: str, request: Request, db: Session = Depend
         models.Aula.data_inicio >= datetime.now()
     ).order_by(models.Aula.data_inicio).all()
 
-    # Mantemos sua lógica de contexto para o template
     contexto_aluno = {
         "id": aluno.id,
         "nome": aluno.nome,
         "sobrenome": aluno.sobrenome,
         "telefone": aluno.telefone,
         "email": aluno.email,
-        "token": aluno.token_acesso, # Adicionamos o token aqui para usar nos formulários se necessário
+        "token": aluno.token_acesso, 
         "tipo": aluno.tipo.name if hasattr(aluno.tipo, 'name') else str(aluno.tipo),
         "creditos_reposicao": aluno.creditos_reposicao
     }
 
-    return templates.TemplateResponse("portal.html", {
-        "request": request,
-        "aluno": contexto_aluno,
+    return templates.TemplateResponse(request, "portal.html", {
+        "aluno": contexto_aluno, 
         "aulas": aulas_aluno
     })
 
@@ -100,6 +108,23 @@ async def reagendar_aula(
         # 1. Converte a data e define o fim da aula (1 hora depois)
         data_dt = datetime.strptime(nova_data, "%Y-%m-%dT%H:%M")
         data_fim_dt = data_dt + timedelta(hours=1)
+
+        if aula_id == 0:  # Nova aula
+            inicio_semana = data_dt - timedelta(days=data_dt.weekday())
+            fim_semana = inicio_semana + timedelta(days=6, hours=23, minutes=59)
+
+            contagem = db.query(models.Aula).filter(
+                models.Aula.aluno_id == aluno.id,
+                models.Aula.status == "marcada",
+                models.Aula.data_inicio >= inicio_semana,
+                models.Aula.data_inicio <= fim_semana
+            ).count()
+
+            if contagem >= (aluno.limite_aulas_semana or 1):
+                return f"Erro: Você já atingiu seu limite de {aluno.limite_aulas_semana} aulas para esta semana."
+
+            if aluno.creditos_reposicao <= 0:
+                return "Erro: Você não possui créditos de reposição suficientes."
         
         g_id = None # Variável para guardar o ID do Google
 
@@ -118,16 +143,16 @@ async def reagendar_aula(
             nova_aula = models.Aula(
                 aluno_id=aluno.id,
                 data_inicio=data_dt,
-                data_fim=data_fim_dt, # Adicionado fim da aula
+                data_fim=data_fim_dt, 
                 status="marcada",
                 eh_reposicao=True,
-                google_event_id=g_id, # Salva o ID do Google
+                google_event_id=g_id, 
                 lembrete_enviado=False
             )
             aluno.creditos_reposicao -= 1
             db.add(nova_aula)
 
-        # --- CASO B: REAGENDAR EXISTENTE (Remover antigo e Criar novo) ---
+        # --- CASO B: REAGENDAR EXISTENTE -
         else:
             aula = db.query(models.Aula).filter(
                 models.Aula.id == aula_id, 

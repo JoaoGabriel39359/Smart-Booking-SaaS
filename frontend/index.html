@@ -3,26 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Agenda SaaS | Professor</title>
+    <title>One Language School | Painel do Professor</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        
+        /* Estilos Essenciais para o funcionamento do Script.js */
+        .aba-content.hidden { display: none !important; }
+        .hidden { display: none !important; }
+
+        .card { 
+            background: white; 
+            border: 1px solid #f1f5f9; 
+            border-radius: 1.5rem; 
+            padding: 1.5rem; 
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); 
+        }
+
+        .tab-btn { 
+            padding: 0.5rem 1rem; 
+            border-radius: 0.75rem; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            transition: all 0.2s; 
+            cursor: pointer; 
+            border: none;
+        }
+
+        /* Cor do botão ativo (Roxo One) */
+        .tab-btn.active { 
+            background-color: white !important; 
+            color: #4f46e5 !important; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
+        }
+
+        .grid-layout { 
+            display: grid; 
+            grid-template-columns: repeat(1, 1fr); 
+            gap: 1rem; 
+        }
+        @media (min-width: 768px) { .grid-layout { grid-template-columns: repeat(2, 1fr); } }
+        @media (min-width: 1024px) { .grid-layout { grid-template-columns: repeat(3, 1fr); } }
+
+        .calendario-grid { 
+            display: grid; 
+            grid-template-columns: repeat(7, 1fr); 
+            gap: 0.5rem; 
+        }
+
+        .input-field { 
+            width: 100%; 
+            border: 2px solid #f1f5f9; 
+            border-radius: 0.75rem; 
+            padding: 0.75rem; 
+            outline: none; 
+            transition: border-color 0.2s;
+        }
+        .input-field:focus { border-color: #4f46e5; }
+        
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    </style>
 </head>
-<body class="bg-slate-50 font-sans antialiased text-slate-900">
+<body class="antialiased text-slate-900">
 
     <div class="max-w-7xl mx-auto py-10 px-4">
-        <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border-b pb-6">
-            <div>
-                <h1 class="text-3xl font-extrabold text-slate-900 italic tracking-tighter">
-                    Agenda <span class="text-blue-600">SaaS</span>
-                </h1>
-                <p class="text-slate-500 font-medium text-sm">Painel de Gestão do Professor</p>
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-6 border-b pb-8">
+            <div class="flex items-center gap-4">
+                <img src="/static/logo.png" alt="One Logo" class="h-14 w-auto bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h1 class="text-3xl font-black text-indigo-900 italic tracking-tighter uppercase">
+                        One <span class="text-pink-500">School</span>
+                    </h1>
+                    <p class="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Painel do Professor</p>
+                </div>
             </div>
-            <nav class="bg-slate-200 p-1 rounded-xl flex space-x-1 shadow-inner overflow-x-auto">
+            
+            <nav class="bg-slate-200 p-1.5 rounded-2xl flex space-x-1 shadow-inner overflow-x-auto">
                 <button onclick="trocarAba('agenda')" id="btnTabAgenda" class="tab-btn active">Agenda</button>
                 <button onclick="trocarAba('alunos')" id="btnTabAlunos" class="tab-btn">Alunos</button>
                 <button onclick="trocarAba('turmas')" id="btnTabTurmas" class="tab-btn">Turmas</button>
@@ -32,12 +94,12 @@
 
         <main>
             <section id="abaAgenda" class="aba-content space-y-6">
-                <div class="card">
+                <div class="card" style="border-top: 4px solid #4f46e5;">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-bold flex items-center">
-                            <i class="fa-solid fa-calendar-check mr-2 text-green-500"></i> Próximas Aulas
+                        <h2 class="text-xl font-black flex items-center">
+                            <i class="fa-solid fa-calendar-check mr-2 text-indigo-500"></i> Próximas Aulas
                         </h2>
-                        <button onclick="abrirModalAgendamentoAvulso()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2">
+                        <button onclick="abrirModalAgendamentoAvulso()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2">
                             <i class="fa-solid fa-plus"></i> Nova Aula Individual
                         </button>
                     </div>
@@ -47,8 +109,8 @@
 
             <section id="abaAlunos" class="aba-content hidden space-y-6">
                 <div class="flex justify-between items-center">
-                    <h2 class="text-xl font-bold">Gestão de Alunos</h2>
-                    <button onclick="abrirModalAluno()" class="btn-primary">
+                    <h2 class="text-xl font-black text-slate-800">Gestão de Alunos</h2>
+                    <button onclick="abrirModalAluno()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2">
                         <i class="fa-solid fa-user-plus"></i> Novo Aluno
                     </button>
                 </div>
@@ -61,50 +123,49 @@
                 <div class="flex justify-between items-center mb-6">
                     <div>
                         <h2 class="text-xl font-black text-slate-800 italic uppercase tracking-tighter">Gestão de Turmas</h2>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase">Configure os horários fixos</p>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Configure horários fixos</p>
                     </div>
-                    
                     <div class="flex gap-2">
-                        <button onclick="gerarAulasDoMes()" class="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-600 shadow-lg shadow-emerald-100 transition-all flex items-center gap-2">
+                        <button onclick="gerarAulasDoMes()" class="bg-pink-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-pink-600 transition-all flex items-center gap-2">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> Gerar Mês
                         </button>
-                        
-                        <button onclick="abrirModalTurma()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all flex items-center gap-2">
+                        <button onclick="abrirModalTurma()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2">
                             <i class="fa-solid fa-plus"></i> Nova Turma
                         </button>
                     </div>
                 </div>
-
-                <div id="listaTurmas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                <div id="listaTurmas" class="grid-layout"></div>
             </section>
 
             <section id="abaGrade" class="aba-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div class="lg:col-span-8 card">
+                <div class="lg:col-span-8 card" style="border-top: 4px solid #4f46e5;">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-bold">Calendário de Turnos</h2>
+                        <h2 class="text-xl font-black text-slate-800">Calendário de Turnos</h2>
                         <div class="flex items-center space-x-2 bg-slate-100 p-1 rounded-xl">
-                            <button onclick="mudarMes(-1)" class="p-2 hover:bg-white rounded-lg transition"><i class="fa-solid fa-chevron-left"></i></button>
+                            <button onclick="mudarMes(-1)" class="p-2 hover:bg-white rounded-lg transition text-indigo-600"><i class="fa-solid fa-chevron-left"></i></button>
                             <span id="mesAtualExtenso" class="font-bold text-sm min-w-[140px] text-center capitalize"></span>
-                            <button onclick="mudarMes(1)" class="p-2 hover:bg-white rounded-lg transition"><i class="fa-solid fa-chevron-right"></i></button>
+                            <button onclick="mudarMes(1)" class="p-2 hover:bg-white rounded-lg transition text-indigo-600"><i class="fa-solid fa-chevron-right"></i></button>
                         </div>
                     </div>
                     <div class="calendario-grid" id="calendarioMensal"></div>
                 </div>
 
                 <div class="lg:col-span-4 space-y-6">
-                    <div id="cardAcaoDia" class="card border-2 border-slate-100">
-                        <h2 id="tituloDiaSelecionado" class="text-lg font-black mb-1 text-slate-800">Selecione um dia</h2>
+                    <div id="cardAcaoDia" class="card border-2 border-indigo-100 bg-indigo-50">
+                        <h2 id="tituloDiaSelecionado" class="text-lg font-black mb-1 text-indigo-900">Selecione um dia</h2>
                         <form id="formGrade" class="space-y-4">
                             <input type="hidden" id="diaSemanaOculto">
                             <div class="grid grid-cols-2 gap-3">
                                 <input type="time" id="inicioGrade" required class="input-field">
                                 <input type="time" id="fimGrade" required class="input-field">
                             </div>
-                            <button type="submit" class="w-full btn-blue">Salvar Turno</button>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase text-[10px] tracking-widest">
+                                Salvar Turno
+                            </button>
                         </form>
                     </div>
                     <div class="card">
-                        <h3 class="font-bold text-slate-700 mb-4 text-[10px] uppercase border-b pb-2 tracking-widest">Grade Semanal</h3>
+                        <h3 class="font-bold text-slate-700 mb-4 text-[10px] uppercase border-b pb-2 tracking-widest text-center">Grade Semanal</h3>
                         <div id="gridSemanal" class="space-y-4 overflow-y-auto max-h-[300px] custom-scroll"></div>
                     </div>
                 </div>
@@ -112,6 +173,6 @@
         </main>
     </div>
 
-    <script src="/static/script.js"></script>
+    <script src="/frontend/script.js"></script>
 </body>
 </html>

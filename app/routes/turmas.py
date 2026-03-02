@@ -13,10 +13,13 @@ router = APIRouter(prefix="/turmas", tags=["turmas"])
 # ==========================================================
 # FUNÇÃO AUXILIAR (A INCREMENTAÇÃO)
 # ==========================================================
+from app.services.google_calendar import criar_evento # Verifique se o import está assim
+
 def processar_geracao_aulas(db: Session, turma: Turma):
-    """Calcula as datas do mês e cria as aulas no banco e Google"""
+    """Gera aulas para os próximos 30 dias a partir de hoje"""
     hoje = date.today()
-    ano, mes = hoje.year, hoje.month
+    # Gerar para os próximos 30 dias para garantir que pegue a virada do mês
+    fim_periodo = hoje + timedelta(days=30)
     
     dias_map = {
         "Segunda": 0, "Terça": 1, "Quarta": 2, 
@@ -27,20 +30,30 @@ def processar_geracao_aulas(db: Session, turma: Turma):
     if dia_alvo is None:
         return 0
 
-    cal = calendar.Calendar(firstweekday=0)
     aulas_criadas = 0
+    data_atual = hoje
 
-    # Itera sobre os dias do mês atual
-    for dia in cal.itermonthdates(ano, mes):
-        # Filtra: dia da semana correto, dentro do mês e não pode ser no passado
-        if dia.weekday() == dia_alvo and dia.month == mes and dia >= hoje:
-            
+    # Loop dia após dia pelos próximos 30 dias
+    while data_atual <= fim_periodo:
+        if data_atual.weekday() == dia_alvo:
+            # Encontrou o dia da semana da turma!
             hora_aula = datetime.strptime(turma.horario, "%H:%M").time()
-            data_inicio = datetime.combine(dia, hora_aula)
+            data_inicio = datetime.combine(data_atual, hora_aula)
             data_fim = data_inicio + timedelta(hours=1)
-            
+
+            # 1. CRIAR NO GOOGLE CALENDAR (Uma vez por horário)
+            google_id = None
+            try:
+                # O parâmetro no seu google_calendar.py é 'nome_aluno', mas aqui é uma turma
+                titulo_google = f"Turma {turma.tipo}: {turma.nome_turma}"
+                google_id = criar_evento(data_inicio, data_fim, titulo_google)
+                print(f"✅ Sincronizado no Google: {data_inicio}")
+            except Exception as g_error:
+                print(f"❌ Erro Google Agenda: {g_error}")
+
+            # 2. VINCULAR ALUNOS NO BANCO
             for aluno in turma.alunos:
-                # Verifica se a aula já existe para evitar duplicidade
+                # Trava de duplicidade
                 existe = db.query(Aula).filter(
                     Aula.aluno_id == aluno.id, 
                     Aula.data_inicio == data_inicio
@@ -53,25 +66,15 @@ def processar_geracao_aulas(db: Session, turma: Turma):
                         data_inicio=data_inicio,
                         data_fim=data_fim,
                         status="marcada",
-                        tipo=turma.tipo
+                        google_event_id=google_id
                     )
                     db.add(nova_aula)
-                    db.flush() 
-
-                    # Tenta sincronizar com Google Agenda
-                    try:
-                        nome_completo = f"{aluno.nome} {aluno.sobrenome or ''}".strip()
-                        event_id = criar_evento_google(
-                            inicio=data_inicio,
-                            fim=data_fim,
-                            nome_aluno=f"{turma.tipo}: {nome_completo}"
-                        )
-                        if event_id:
-                            nova_aula.google_event_id = event_id
-                    except Exception as g_error:
-                        print(f"Erro Google Agenda: {g_error}")
-                    
                     aulas_criadas += 1
+            
+            db.flush() # Salva temporariamente para o próximo loop ver
+            
+        data_atual += timedelta(days=1)
+
     db.commit()
     return aulas_criadas
 
@@ -108,7 +111,10 @@ def criar_turma(dados: TurmaCreate):
             aluno.tipo = dados.tipo # Atualiza o tipo do aluno para bater com a turma
 
         db.commit()
-        return {"msg": f"Turma {nova_turma.nome_turma} criada com sucesso para {dados.dia_semana}s às {dados.horario}!"}
+
+        processar_geracao_aulas(db, nova_turma) 
+        
+        return {"msg": f"Turma {nova_turma.nome_turma} criada e aulas do mês geradas com sucesso!"}
         
     except HTTPException as http_e:
         db.rollback()

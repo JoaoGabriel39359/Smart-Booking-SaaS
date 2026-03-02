@@ -41,7 +41,7 @@ async function carregarAlunos() {
             // Criamos o HTML de cada card
             const cores = {
                 'VIP': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-                'DUO': 'bg-blue-100 text-blue-700 border-blue-200',
+                'DUO': 'bg-indigo-100 text-indigo-700 border-indigo-200',
                 'TEAM': 'bg-slate-100 text-slate-700 border-slate-200'
             };
             const classeCor = cores[aluno.tipo] || cores['TEAM'];
@@ -60,7 +60,7 @@ async function carregarAlunos() {
                     </p>
                 </div>
                 <div class="flex gap-3">
-                    <button id="edit-${aluno.id}" class="text-blue-500 hover:text-blue-700">
+                    <button id="edit-${aluno.id}" class="text-indigo-500 hover:text-indigo-700">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
                     <button onclick="deletarAluno(${aluno.id})" class="text-slate-300 hover:text-red-500">
@@ -250,13 +250,13 @@ async function carregarTurmas() {
                     `).join('')}
                 </div>
 
-                <div id="area-adicao-${t.id}" class="hidden mb-4 p-3 bg-blue-50 rounded-xl border border-blue-100 space-y-2">
-                    <label class="text-[9px] font-black text-blue-400 uppercase tracking-widest">Selecionar Aluno Livre</label>
-                    <select id="select-alunos-livres-${t.id}" class="w-full bg-white border border-blue-200 rounded-lg px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500">
+                <div id="area-adicao-${t.id}" class="hidden mb-4 p-3 bg-indigo-50 rounded-xl border border-indigo-100 space-y-2">
+                    <label class="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Selecionar Aluno Livre</label>
+                    <select id="select-alunos-livres-${t.id}" class="w-full bg-white border border-indigo-200 rounded-lg px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="">Carregando...</option>
                     </select>
                     <div class="flex gap-2">
-                        <button onclick="confirmarAdicao(${t.id})" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-blue-700 transition shadow-md shadow-blue-100">
+                        <button onclick="confirmarAdicao(${t.id})" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-indigo-700 transition shadow-md shadow-indigo-100">
                             Confirmar
                         </button>
                         <button onclick="document.getElementById('area-adicao-${t.id}').classList.add('hidden')" class="bg-white text-slate-400 px-3 rounded-lg text-[10px] font-bold uppercase border border-slate-200">
@@ -268,7 +268,7 @@ async function carregarTurmas() {
                 <div class="flex gap-2 border-t pt-4">
                     <button onclick="prepararAdicao(${t.id}, '${t.tipo}', ${totalAlunos}, ${limiteMax})" 
                         ${estaCheia ? 'disabled' : ''}
-                        class="flex-1 text-[10px] font-bold uppercase p-2 rounded-lg ${estaCheia ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'} transition">
+                        class="flex-1 text-[10px] font-bold uppercase p-2 rounded-lg ${estaCheia ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white'} transition">
                         <i class="fa-solid fa-plus"></i> Aluno
                     </button>
                     <button onclick="deletarTurma(${t.id})" class="p-2 text-slate-300 hover:text-red-500 transition">
@@ -291,7 +291,7 @@ async function abrirModalTurma() {
     // 2. Cria o HTML da lista de alunos
     let listaAlunosHTML = alunosLivres.map(al => `
         <label class="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer border border-slate-100">
-            <input type="checkbox" name="aluno-turma" value="${al.id}" class="rounded text-blue-600">
+            <input type="checkbox" name="aluno-turma" value="${al.id}" class="rounded text-indigo-600">
             <span class="text-sm text-slate-700">${al.nome} ${al.sobrenome || ''}</span>
         </label>
     `).join('');
@@ -406,75 +406,100 @@ async function carregarAgenda() {
     try {
         const res = await fetch(`${API_URL}/aulas/lista-professor`);
         const aulas = await res.json();
+        
         container.innerHTML = aulas.length ? '' : '<p class="col-span-full text-slate-400 py-10 text-center">Nenhuma aula agendada.</p>';
         
-        aulas.forEach(a => {
-            // Cor do status para o professor saber o que já foi feito
-            const statusCor = a.status === 'Presente' ? 'border-green-500' : (a.status === 'Ausente' ? 'border-red-500' : 'border-blue-500');
+        const agora = new Date();
+
+        // Usamos o index (i) para identificar qual objeto da lista estamos clicando
+        aulas.forEach((a, i) => {
+            const dataAula = new Date(a.data_inicio);
+            const podeDarPresenca = agora >= dataAula;
+            const dataFormatada = dataAula.toLocaleDateString('pt-BR', { 
+                weekday: 'short', day: '2-digit', month: 'long' 
+            });
+
+            // Definimos a cor do status (usando o status do primeiro aluno como base)
+            const statusCor = a.status === 'presente' ? 'border-green-500' : 'border-indigo-500';
 
             container.innerHTML += `
                 <div class="p-5 border rounded-2xl bg-white shadow-sm border-l-8 ${statusCor} flex justify-between items-center hover:shadow-md transition-all">
                     <div class="flex-1">
-                        <p class="font-extrabold text-slate-900 text-lg leading-tight tracking-tight">
-                            ${a.aluno_nome}
-                        </p>
-
-                        <button onclick="verHistorico(${a.aluno_id}, '${a.aluno_nome}')" 
-                                class="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wide mt-1.5 group transition-all">
-                            <i class="fa-solid fa-clock-rotate-left group-hover:rotate-[-45deg] transition-transform"></i> 
-                            Ver Histórico
-                        </button>
-
-                        <div class="mt-4 flex flex-wrap items-center gap-3">
-                            <p class="text-xs text-slate-500 font-semibold bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                                <i class="fa-regular fa-clock text-blue-500 mr-1"></i> 
-                                ${new Date(a.data_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        <div class="flex items-center gap-2">
+                            <p class="font-extrabold text-slate-900 text-lg leading-tight tracking-tight">
+                                ${a.nome_exibicao} 
                             </p>
-                            
-                            ${a.desempenho ? `
-                                <span class="text-[10px] bg-green-100 text-green-800 px-2.5 py-1 rounded-lg font-black shadow-sm border border-green-200">
-                                    ⭐ ${a.desempenho}
-                                </span>
-                            ` : ''}
-                            ${a.validade_reposicao ? `
-                                <span class="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-1 rounded-lg font-black border border-amber-200 animate-pulse">
-                                    ⚠️ Expira: ${new Date(a.validade_reposicao).toLocaleDateString('pt-BR')}
-                                </span>
-                            ` : ''}
+                            <span class="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase">
+                                ${a.tipo} ${a.is_turma ? `(${a.alunos.length})` : ''}
+                            </span>
+                        </div>
+
+                        <div class="mt-4 flex flex-wrap items-center gap-2">
+                            <p class="text-[11px] text-slate-600 font-bold bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                                <i class="fa-regular fa-calendar text-indigo-500 mr-1"></i> 
+                                ${dataFormatada}
+                            </p>
+                            <p class="text-[11px] text-slate-600 font-bold bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                                <i class="fa-regular fa-clock text-indigo-500 mr-1"></i> 
+                                ${dataAula.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                         </div>
                     </div>
 
                     <div class="flex items-center gap-3 ml-4">
-                        <button onclick="abrirChamada(${a.id}, '${a.aluno_nome}')" 
-                                class="bg-blue-600 text-white hover:bg-blue-700 p-4 rounded-2xl transition-all shadow-lg active:scale-95"
-                                title="Fazer Chamada">
+                        <button id="btn-chamada-${i}"
+                                ${podeDarPresenca ? '' : 'disabled'}
+                                class="${podeDarPresenca 
+                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100' 
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'} 
+                                    p-4 rounded-2xl transition-all active:scale-95 flex flex-col items-center gap-1"
+                                title="${podeDarPresenca ? 'Fazer Chamada' : 'Aguarde o horário da aula'}">
                             <i class="fa-solid fa-clipboard-user text-xl"></i>
+                            <span class="text-[8px] font-black uppercase">${podeDarPresenca ? 'Chamada' : 'Bloqueado'}</span>
                         </button>
-                        
-                        <button onclick="cancelarAula(${a.id})" 
+
+                        <button id="btn-cancelar-${i}" 
                                 class="text-slate-300 hover:text-red-500 p-2 transition-colors hover:bg-red-50 rounded-full"
-                                title="Cancelar Aula">
+                                title="Cancelar Aula da Turma">
                             <i class="fa-solid fa-circle-xmark text-lg"></i>
                         </button>
                     </div>
                 </div>`;
+
+            // Atribuímos o evento de clique após criar o HTML para evitar erro de aspas no JSON
+            setTimeout(() => {
+                const btnCancel = document.getElementById(`btn-cancelar-${i}`);
+                if(btnCancel) btnCancel.onclick = () => cancelarAulaGrupo(a);
+                const btn = document.getElementById(`btn-chamada-${i}`);
+                if(btn) btn.onclick = () => abrirChamada(a); 
+            }, 0);
         });
     } catch (e) { console.error("Erro na agenda", e); }
 }
 
 // FUNÇÃO QUE ABRE O POPUP DE CHAMADA E NOTA
-async function abrirChamada(aulaId, alunoNome) {
+async function abrirChamada(dadosAgrupados) {
+    // 1. Geramos a lista de presença para cada aluno da turma/VIP
+    const listaAlunosHtml = dadosAgrupados.alunos.map(al => `
+        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2">
+            <span class="font-bold text-slate-700 text-sm">${al.nome}</span>
+            <select id="status-${al.aula_id}" class="border-2 border-slate-200 rounded-lg p-1 text-xs font-bold outline-none focus:border-indigo-500">
+                <option value="presente">✅ Presente</option>
+                <option value="ausente">❌ Ausente</option>
+            </select>
+        </div>
+    `).join('');
+
     const { value: formValues } = await Swal.fire({
-        title: `<span class="text-slate-700">Chamada:</span> <span class="text-blue-600">${alunoNome}</span>`,
+        title: `<span class="text-slate-700">Chamada:</span> <span class="text-indigo-900">${dadosAgrupados.nome_exibicao}</span>`,
         html: `
             <div class="text-left space-y-4 p-2">
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Presença</label>
-                <select id="ch-status" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm bg-white focus:border-blue-500 outline-none transition-all font-medium">
-                    <option value="presente">✅ Presente</option>
-                    <option value="ausente">❌ Ausente</option>
-                </select>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Lista de Presença</label>
+                <div class="max-h-40 overflow-y-auto pr-1">
+                    ${listaAlunosHtml}
+                </div>
 
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Desempenho na Aula</label>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Desempenho da Turma</label>
                 <div class="grid grid-cols-3 gap-3">
                     <label class="cursor-pointer">
                         <input type="radio" name="nota" value="Ruim" class="peer hidden">
@@ -501,37 +526,42 @@ async function abrirChamada(aulaId, alunoNome) {
                     </label>
                 </div>
 
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Conteúdo Estudado</label>
-                <textarea id="ch-obs" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm h-24 focus:border-blue-500 outline-none transition-all" placeholder="Ex: Revisão de escalas maiores e exercícios de palhetada..."></textarea>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Conteúdo Estudado (Geral)</label>
+                <textarea id="ch-obs" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm h-24 focus:border-indigo-500 outline-none transition-all" placeholder="O que foi trabalhado hoje?"></textarea>
             </div>
         `,
         showCancelButton: true,
-        confirmButtonText: 'Confirmar Presença',
+        confirmButtonText: 'Confirmar Chamada',
         cancelButtonText: 'Voltar',
         confirmButtonColor: '#2563eb',
         cancelButtonColor: '#94a3b8',
         preConfirm: () => {
-            return {
-                status: document.getElementById('ch-status').value,
+            // Mapeamos a presença de cada aluno individualmente
+            return dadosAgrupados.alunos.map(al => ({
+                aula_id: al.aula_id,
+                status: document.getElementById(`status-${al.aula_id}`).value,
                 desempenho: document.querySelector('input[name="nota"]:checked').value,
                 observacoes: document.getElementById('ch-obs').value
-            }
+            }));
         }
     });
 
     if (formValues) {
         try {
-            // Usamos encodeURIComponent para evitar problemas com espaços ou caracteres especiais na URL
-            const url = `${API_URL}/aulas/${aulaId}/presenca?status=${formValues.status}&desempenho=${formValues.desempenho}&observacoes=${encodeURIComponent(formValues.observacoes)}`;
+            // Como agora temos uma lista de presenças (mesmo que seja só 1 aluno VIP), fazemos um loop
+            let falhas = 0;
             
-            const res = await fetch(url, { method: 'PATCH' });
+            for (const chamada of formValues) {
+                const url = `${API_URL}/aulas/${chamada.aula_id}/presenca?status=${chamada.status}&desempenho=${chamada.desempenho}&observacoes=${encodeURIComponent(chamada.observacoes)}`;
+                const res = await fetch(url, { method: 'PATCH' });
+                if (!res.ok) falhas++;
+            }
             
-            if (res.ok) {
-                Toast.fire({ icon: 'success', title: 'Presença registrada!' });
-                carregarAgenda(); // Recarrega a lista para o aluno sumir (já que não está mais 'marcada')
+            if (falhas === 0) {
+                Toast.fire({ icon: 'success', title: 'Chamada realizada com sucesso!' });
+                carregarAgenda();
             } else {
-                const erro = await res.json();
-                Swal.fire('Erro', erro.detail || 'Falha ao salvar', 'error');
+                Swal.fire('Atenção', `Chamada concluída, mas ${falhas} registros falharam.`, 'warning');
             }
         } catch (e) {
             console.error(e);
@@ -570,8 +600,8 @@ function gerarCalendario() {
         const ehHoje = (new Date()).toDateString() === (new Date(ano, mes, dia)).toDateString();
         grid.innerHTML += `
             <div onclick="selecionarDia(this, ${dia}, ${new Date(ano,mes,dia).getDay()})" 
-                 class="bg-white h-24 p-2 border border-slate-100 hover:border-blue-400 cursor-pointer transition-colors relative">
-                <span class="text-xs font-black ${ehHoje ? 'bg-blue-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-300'}">
+                 class="bg-white h-24 p-2 border border-slate-100 hover:border-indigo-500 cursor-pointer transition-colors relative">
+                <span class="text-xs font-black ${ehHoje ? 'bg-indigo-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-300'}">
                     ${dia}
                 </span>
             </div>`;
@@ -959,7 +989,7 @@ async function verHistorico(alunoId, alunoNome) {
         }
 
         Swal.fire({
-            title: `<span class="text-slate-700">Histórico:</span> <span class="text-blue-600">${alunoNome}</span>`,
+            title: `<span class="text-slate-700">Histórico:</span> <span class="text-indigo-900">${alunoNome}</span>`,
             html: conteudoHtml,
             width: '600px',
             confirmButtonText: 'Fechar',
@@ -969,5 +999,48 @@ async function verHistorico(alunoId, alunoNome) {
     } catch (e) {
         console.error("Erro ao carregar histórico", e);
         Swal.fire('Erro', 'Não foi possível carregar o histórico.', 'error');
+    }
+}
+
+async function cancelarAulaGrupo(dados) {
+    const confirmacao = await Swal.fire({
+        title: 'Cancelar aula?',
+        text: `Isso removerá a aula de todos os alunos da ${dados.nome_exibicao}.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Sim, cancelar tudo',
+        cancelButtonText: 'Voltar'
+    });
+
+    if (confirmacao.isConfirmed) {
+        try {
+            // Se for turma, pegamos o ID da turma. Se for VIP, pegamos o ID do aluno.
+            const params = new URLSearchParams({
+                data_inicio: dados.data_inicio
+            });
+
+            if (dados.is_turma) {
+                // Aqui você deve garantir que o seu backend enviou o campo 'turma_id'
+                params.append('turma_id', dados.alunos[0].turma_id || dados.turma_id); 
+            } else {
+                params.append('aluno_id', dados.alunos[0].aluno_id);
+            }
+
+            const res = await fetch(`${API_URL}/aulas/cancelar-grupo?${params.toString()}`, { 
+                method: 'DELETE' 
+            });
+
+            if (res.ok) {
+                Toast.fire({ icon: 'success', title: 'Aula(s) cancelada(s)!' });
+                carregarAgenda();
+            } else {
+                const erro = await res.json();
+                Swal.fire('Erro', erro.detail || 'Erro ao cancelar', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Erro', 'Não foi possível conectar ao servidor.', 'error');
+        }
     }
 }

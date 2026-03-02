@@ -1,9 +1,9 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
 from app.models import TipoAluno
 
-# Campos que são comuns tanto na criação quanto na edição
 class AlunoBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     nome: str
     sobrenome: str
     telefone: str
@@ -17,29 +17,26 @@ class AlunoCreate(AlunoBase):
     turma_id: Optional[int] = None
 
 class AlunoEdit(BaseModel):
-    nome: str
+    model_config = ConfigDict(from_attributes=True)
+    nome: Optional[str] = None
     sobrenome: Optional[str] = None
-    telefone: str
+    telefone: Optional[str] = None
     email: Optional[str] = None
-    tipo: Optional[TipoAluno] = None  # <-- Aqui precisa ser o nome da sua classe Enum, não 'str'
+    tipo: Optional[TipoAluno] = None
     endereco: Optional[str] = None
     cidade: Optional[str] = None
     estado: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 class TurmaCreate(BaseModel):
-    nome_turma: str  # <--- Garanta que aqui é nome_turma
+    model_config = ConfigDict(from_attributes=True)
+    nome_turma: str
     tipo: str
     dia_semana: str
     horario: str
-    aluno_ids: list[int] = []
+    aluno_ids: List[int] = []
 
 class TurmaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     nome_turma: str
     tipo: str
-    
-    class Config:
-        from_attributes = True

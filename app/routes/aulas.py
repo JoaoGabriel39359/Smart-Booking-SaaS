@@ -1,4 +1,5 @@
 import traceback
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -315,11 +316,11 @@ def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)): # <-
     inicio_aula = aula.data_inicio
 
     # 🚀 TRAVA DE SEGURANÇA: APENAS VIP CANCELA
-    if aluno.tipo.name != "VIP":
+    if aluno.tipo != TipoAluno.VIP:
         raise HTTPException(
-            status_code=403, 
-            detail="Seu plano não permite cancelamento. Apenas alunos VIP possuem este direito."
-        )
+        status_code=403,
+        detail="Seu plano não permite cancelamento. Apenas alunos VIP possuem este direito."
+    )
 
     # 2. Lógica de Antecedência (2 horas)
     gera_reposicao = (inicio_aula - agora) >= timedelta(hours=2)
@@ -415,28 +416,36 @@ from datetime import datetime
 def listar_aulas_professor(db: Session = Depends(get_db)):
     agora = datetime.now()
     
-    # Adicionamos filtros: 
-    # 1. Apenas aulas onde a data de fim é maior que 'agora'
-    # 2. Apenas aulas com status 'marcada' (ignora canceladas/ausentes)
     resultados = db.query(Aula, Aluno).\
         join(Aluno, Aula.aluno_id == Aluno.id).\
-        filter(Aula.data_fim >= agora).\
+        filter(Aula.data_fim >= agora - timedelta(hours=3)).\
         filter(Aula.status == "marcada").\
         order_by(Aula.data_inicio.asc()).all()
     
-    lista_formatada = []
+    agrupado = {}
+
     for aula, aluno in resultados:
-        lista_formatada.append({
-            "id": aula.id,
+        chave = f"{aula.data_inicio.isoformat()}_{aula.turma_id or f'vip_{aluno.id}'}"
+        
+        if chave not in agrupado:
+            agrupado[chave] = {
+                "data_inicio": aula.data_inicio.isoformat(),
+                "turma_id": aula.turma_id, # <--- LINHA ESSENCIAL ADICIONADA AQUI
+                "status": aula.status,
+                "nome_exibicao": aula.turma.nome_turma if aula.turma_id else f"{aluno.nome} {aluno.sobrenome or ''}",
+                "tipo": aula.turma.tipo if aula.turma_id else aluno.tipo.name if hasattr(aluno.tipo, 'name') else str(aluno.tipo),
+                "is_turma": True if aula.turma_id else False,
+                "validade_reposicao": aula.validade_reposicao.isoformat() if aula.validade_reposicao else None,
+                "alunos": []
+            }
+        
+        agrupado[chave]["alunos"].append({
+            "aula_id": aula.id,
             "aluno_id": aluno.id,
-            "data_inicio": aula.data_inicio.isoformat(),
-            "aluno_nome": aluno.nome,
-            "aluno_tipo": aluno.tipo,
-            "validade_reposicao": aula.validade_reposicao.isoformat() if aula.validade_reposicao else None,
-            "desempenho": aula.desempenho
+            "nome": f"{aluno.nome} {aluno.sobrenome or ''}"
         })
-    
-    return lista_formatada
+
+    return list(agrupado.values())
 
 # ==============================
 # DELETAR AULA (PAINEL PROFESSOR)
@@ -500,3 +509,39 @@ def marcar_presenca(
     
     db.commit()
     return {"msg": "Presença registrada com sucesso!"}
+
+@router.delete("/cancelar-grupo")
+def cancelar_aula_grupo(
+    data_inicio: str, 
+    turma_id: Optional[int] = None, 
+    aluno_id: Optional[int] = None, 
+    db: Session = Depends(get_db)
+):
+    try:
+        # O fromisoformat lida bem com o "Z" ou "+00:00" que o JS envia
+        dt_inicio = datetime.fromisoformat(data_inicio.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de data inválido.")
+
+    query = db.query(Aula).filter(Aula.data_inicio == dt_inicio)
+
+    # Prioridade para Turma, depois Aluno individual
+    if turma_id:
+        query = query.filter(Aula.turma_id == turma_id)
+    elif aluno_id:
+        query = query.filter(Aula.aluno_id == aluno_id)
+    else:
+        raise HTTPException(status_code=400, detail="É necessário informar turma_id ou aluno_id.")
+
+    aulas_para_cancelar = query.all()
+
+    if not aulas_para_cancelar:
+        return {"msg": "Nenhuma aula encontrada (talvez já tenha sido removida).", "count": 0}
+
+    for aula in aulas_para_cancelar:
+        # Se você tiver integração com Google Calendar, delete aqui também
+        # if aula.google_event_id: remover_evento_google(aula.google_event_id)
+        db.delete(aula)
+
+    db.commit()
+    return {"msg": "Cancelamento realizado", "count": len(aulas_para_cancelar)}

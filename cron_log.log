@@ -99,3 +99,163 @@ DEBUG: Buscando aulas na janela de teste: 13:00 até 23:00
 ✅ Alerta 24h: Junin
 DEBUG: Buscando aulas na janela de teste: 13:10 até 23:10
 --- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:20:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:20 até 23:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:30:02 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:30 até 23:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:40:02 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:40 até 23:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 18:50:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 13:50 até 23:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 19:00:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 14:00 até 00:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 27/02/2026 19:10:01 ---
+✅ Alerta 24h: Junin
+DEBUG: Buscando aulas na janela de teste: 14:10 até 00:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 11:00:02 ---
+DEBUG: Buscando aulas na janela de teste: 06:00 até 16:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 11:10:01 ---
+DEBUG: Buscando aulas na janela de teste: 06:10 até 16:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 11:20:02 ---
+DEBUG: Buscando aulas na janela de teste: 06:20 até 16:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 11:30:01 ---
+DEBUG: Buscando aulas na janela de teste: 06:30 até 16:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 12:00:01 ---
+DEBUG: Buscando aulas na janela de teste: 07:00 até 17:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 12:10:01 ---
+DEBUG: Buscando aulas na janela de teste: 07:10 até 17:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 12:20:02 ---
+DEBUG: Buscando aulas na janela de teste: 07:20 até 17:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 12:30:01 ---
+DEBUG: Buscando aulas na janela de teste: 07:30 até 17:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:00:01 ---
+DEBUG: Buscando aulas na janela de teste: 09:00 até 19:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:10:02 ---
+DEBUG: Buscando aulas na janela de teste: 09:10 até 19:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:20:01 ---
+DEBUG: Buscando aulas na janela de teste: 09:20 até 19:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:30:02 ---
+DEBUG: Buscando aulas na janela de teste: 09:30 até 19:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:40:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 09:40 até 19:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 14:50:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 09:50 até 19:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:00:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:00 até 20:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:10:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:10 até 20:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:20:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:20 até 20:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:30:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:30 até 20:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:40:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:40 até 20:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 15:50:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 10:50 até 20:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:00:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:00 até 21:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:10:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:10 até 21:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:20:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:20 até 21:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:30:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:30 até 21:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:40:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:40 até 21:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 16:50:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 11:50 até 21:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 17:00:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 12:00 até 22:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 19:40:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 14:40 até 00:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 19:50:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 14:50 até 00:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:00:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:00 até 01:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:10:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:10 até 01:10
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:20:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:20 até 01:20
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:30:01 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:30 até 01:30
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:40:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:40 até 01:40
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 20:50:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:50 até 01:50
+--- Processamento concluído ---
+--- Iniciando Cron Job: 28/02/2026 21:00:02 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 16:00 até 02:00
+--- Processamento concluído ---
+--- Iniciando Cron Job: 01/03/2026 20:30:40 ---
+✅ Alerta 24h: João 
+DEBUG: Buscando aulas na janela de teste: 15:30 até 01:30
+--- Processamento concluído ---

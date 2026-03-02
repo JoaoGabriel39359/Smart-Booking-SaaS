@@ -17,3 +17,8 @@ client_secret*.json
 # Pastas de IDEs
 .vscode/
 .idea/
+
+# Adicione isso ao seu .gitignore
+test.db
+.pytest_cache/
+__pycache__/
