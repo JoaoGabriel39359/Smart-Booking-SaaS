@@ -1,3 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+
+.aba-content.hidden { display: none !important; }
+.hidden { display: none !important; }
+
 /* Customizações de Grid e Calendário */
 .calendario-grid {
     display: grid;
@@ -39,9 +45,18 @@
     gap: 1.5rem;
 }
 
-@media (min-width: 768px) {
-    .grid-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px) { .grid-layout { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .grid-layout { grid-template-columns: repeat(3, 1fr); } }
+
+.input-field { 
+    width: 100%; 
+    border: 2px solid #f1f5f9; 
+    border-radius: 0.75rem; 
+    padding: 0.75rem; 
+    outline: none; 
+    transition: border-color 0.2s;
 }
+.input-field:focus { border-color: #4f46e5; }
 
 /* Inputs do SweetAlert e Gerais */
 .swal2-input-custom, .input-field {
