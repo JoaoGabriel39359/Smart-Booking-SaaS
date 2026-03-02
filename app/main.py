@@ -15,28 +15,44 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 # Cria as tabelas no banco
+from fastapi import FastAPI, Request, Depends, Form
+from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from app.services.google_calendar import criar_evento, remover_evento_google
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from app.routes import alunos, aulas, webhook, turmas 
+from app.database import Base, engine, get_db
+from app import models
+from apscheduler.schedulers.background import BackgroundScheduler
+from app.services.lembretes import verificar_lembretes
+from datetime import datetime, timedelta
+import os
+
+# --- LÓGICA DE CAMINHOS ABSOLUTOS ---
+# Pega o caminho de onde o main.py está (dentro da pasta /app)
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Sobe um nível para chegar na raiz (não importa se chama agenda_saas ou smart_booking_saas)
+BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+
+# Cria as tabelas no banco
 Base.metadata.create_all(bind=engine)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: O que o sistema faz ao ligar
     print("🚀 Sistema Agenda SaaS Iniciado")
     if not scheduler.running:
         scheduler.start()
     yield
-    # Shutdown: O que o sistema faz ao desligar
     print("🛑 Sistema Encerrado")
     if scheduler.running:
         scheduler.shutdown()
 
-# JUNTE AS CONFIGURAÇÕES AQUI:
-app = FastAPI(
-    title="Agenda SaaS", 
-    lifespan=lifespan
-)
+app = FastAPI(title="Agenda SaaS", lifespan=lifespan)
 
-# Configurações de Pastas
+# --- CONFIGURAÇÃO DE PASTAS ESTÁTICAS ---
+# Usando caminhos absolutos forçados para o Render não se perder
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "app", "static")), name="static")
 app.mount("/frontend", StaticFiles(directory=os.path.join(BASE_DIR, "frontend")), name="frontend")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "app", "templates"))
@@ -47,21 +63,22 @@ app.include_router(alunos.router)
 app.include_router(aulas.router)
 app.include_router(webhook.router) 
 
-# --- SCHEDULER (Lembretes) ---
 scheduler = BackgroundScheduler()
 scheduler.add_job(verificar_lembretes, 'interval', minutes=1)
-
-# --- ROTAS DE PÁGINAS (FRONTEND) ---
 
 @app.get("/")
 def home():
     return {"status": "SaaS de Agenda Online Rodando"}
 
-# Painel do Professor 
+# Painel do Professor corrigido com caminho absoluto
 @app.get("/painel")
 async def painel():
     caminho_index = os.path.join(BASE_DIR, "frontend", "index.html")
+    if not os.path.exists(caminho_index):
+        return {"erro": f"Arquivo index.html não encontrado em: {caminho_index}"}
     return FileResponse(caminho_index)
+
+# ... (restante do código do portal e reagendamento continua igual)
 
 # NOVO PORTAL DO ALUNO (Unificado: Ver, Cancelar e Agendar)
 @app.get("/portal/{token}", response_class=HTMLResponse)
