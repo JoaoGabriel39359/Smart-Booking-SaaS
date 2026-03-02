@@ -1,8 +1,17 @@
 from sqlalchemy import create_engine
+import os
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# URL para o Postgres Local
-DB_URL = "postgresql://postgres:8899jgvb@localhost:5432/agenda_saas"
+DB_URL = os.getenv("DATABASE_URL")
+
+if not DB_URL:
+    # Este é o seu banco local para quando você estiver programando no VS Code
+    DB_URL = "postgresql://postgres:8899jgvb@localhost:5432/agenda_saas"
+else:
+    # Correção importante: O Render/SQLAlchemy às vezes exige 'postgresql://' 
+    # mas o link do Supabase pode vir como 'postgres://'
+    if DB_URL.startswith("postgres://"):
+        DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
