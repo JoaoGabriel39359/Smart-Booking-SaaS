@@ -1,4 +1,6 @@
-const API_URL = 'http://127.0.0.1:8000';
+const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
+    ? 'http://127.0.0.1:8000' 
+    : window.location.origin;
 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
 const diasNome = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 
