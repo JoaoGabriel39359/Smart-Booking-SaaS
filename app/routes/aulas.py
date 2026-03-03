@@ -1,7 +1,7 @@
 import traceback
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Depends, Query as FastAPIQuery
+from sqlalchemy.orm import Query, Session
 from sqlalchemy import func
 from app.services.whatsapp import enviar_whatsapp
 from app.database import SessionLocal, get_db
@@ -109,6 +109,7 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
 
             nova = Aula(
                 aluno_id=p.id,
+                turma_id=p.turma_id,
                 data_inicio=inicio,
                 data_fim=fim,
                 status="marcada", 
@@ -447,6 +448,51 @@ def listar_aulas_professor(db: Session = Depends(get_db)):
 
     return list(agrupado.values())
 
+@router.delete("/cancelar-grupo")
+def cancelar_aula_grupo(
+    data_inicio: str = FastAPIQuery(...),
+    turma_id: Optional[int] = FastAPIQuery(None), 
+    aluno_id: Optional[int] = FastAPIQuery(None), 
+    db: Session = Depends(get_db)
+):
+    try:
+        limpo = data_inicio.replace('Z', '+00:00').split('.')[0]
+        dt_inicio = datetime.fromisoformat(limpo)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida.")
+
+    query = db.query(Aula).filter(Aula.data_inicio == dt_inicio)
+
+    if turma_id:
+        query = query.filter(Aula.turma_id == turma_id)
+    elif aluno_id:
+        query = query.filter(Aula.aluno_id == aluno_id)
+    else:
+        raise HTTPException(status_code=400, detail="Informe id.")
+
+    aulas_para_cancelar = query.all()
+
+    if not aulas_para_cancelar:
+        return {"msg": "Nada encontrado", "count": 0}
+
+    # --- NOVIDADE: REMOVER DO GOOGLE ANTES DE APAGAR DO BANCO ---
+    # Pegamos o ID do Google da primeira aula encontrada (já que é o mesmo para o grupo)
+    google_id_para_remover = aulas_para_cancelar[0].google_event_id
+
+    if google_id_para_remover:
+        try:
+            remover_evento_google(google_id_para_remover)
+            print(f"DEBUG: Evento {google_id_para_remover} removido do Google.")
+        except Exception as ge:
+            print(f"DEBUG: Erro ao remover do Google: {ge}")
+
+    # Agora sim, deleta do banco de dados
+    for aula in aulas_para_cancelar:
+        db.delete(aula)
+
+    db.commit()
+    return {"msg": "Aula e evento Google removidos", "count": len(aulas_para_cancelar)}
+
 # ==============================
 # DELETAR AULA (PAINEL PROFESSOR)
 # ==============================
@@ -509,39 +555,3 @@ def marcar_presenca(
     
     db.commit()
     return {"msg": "Presença registrada com sucesso!"}
-
-@router.delete("/cancelar-grupo")
-def cancelar_aula_grupo(
-    data_inicio: str, 
-    turma_id: Optional[int] = None, 
-    aluno_id: Optional[int] = None, 
-    db: Session = Depends(get_db)
-):
-    try:
-        # O fromisoformat lida bem com o "Z" ou "+00:00" que o JS envia
-        dt_inicio = datetime.fromisoformat(data_inicio.replace('Z', '+00:00'))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de data inválido.")
-
-    query = db.query(Aula).filter(Aula.data_inicio == dt_inicio)
-
-    # Prioridade para Turma, depois Aluno individual
-    if turma_id:
-        query = query.filter(Aula.turma_id == turma_id)
-    elif aluno_id:
-        query = query.filter(Aula.aluno_id == aluno_id)
-    else:
-        raise HTTPException(status_code=400, detail="É necessário informar turma_id ou aluno_id.")
-
-    aulas_para_cancelar = query.all()
-
-    if not aulas_para_cancelar:
-        return {"msg": "Nenhuma aula encontrada (talvez já tenha sido removida).", "count": 0}
-
-    for aula in aulas_para_cancelar:
-        # Se você tiver integração com Google Calendar, delete aqui também
-        # if aula.google_event_id: remover_evento_google(aula.google_event_id)
-        db.delete(aula)
-
-    db.commit()
-    return {"msg": "Cancelamento realizado", "count": len(aulas_para_cancelar)}

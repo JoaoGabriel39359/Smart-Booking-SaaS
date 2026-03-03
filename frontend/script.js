@@ -1007,41 +1007,66 @@ async function verHistorico(alunoId, alunoNome) {
 async function cancelarAulaGrupo(dados) {
     const confirmacao = await Swal.fire({
         title: 'Cancelar aula?',
-        text: `Isso removerá a aula de todos os alunos da ${dados.nome_exibicao}.`,
+        text: `Isso removerá a aula de ${dados.nome_exibicao}.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
-        confirmButtonText: 'Sim, cancelar tudo',
+        confirmButtonText: 'Sim, cancelar',
         cancelButtonText: 'Voltar'
     });
 
     if (confirmacao.isConfirmed) {
         try {
-            // Se for turma, pegamos o ID da turma. Se for VIP, pegamos o ID do aluno.
-            const params = new URLSearchParams({
-                data_inicio: dados.data_inicio
-            });
+            // 1. Tratamento rigoroso da data para o formato que o Python (fromisoformat) aceita
+            // Removemos os milissegundos e o 'Z' se houver
+            let dataIso = typeof dados.data_inicio === 'string' 
+                ? dados.data_inicio 
+                : dados.data_inicio.toISOString();
+            
+            dataIso = dataIso.split('.')[0]; // Pega apenas YYYY-MM-DDTHH:MM:SS
 
-            if (dados.is_turma) {
-                // Aqui você deve garantir que o seu backend enviou o campo 'turma_id'
-                params.append('turma_id', dados.alunos[0].turma_id || dados.turma_id); 
+            const params = new URLSearchParams();
+            params.append('data_inicio', dataIso);
+
+            // 2. Identificação precisa do ID (Turma ou Aluno)
+            if (dados.is_turma || dados.turma_id) {
+                const idTurma = dados.turma_id || (dados.alunos && dados.alunos[0].turma_id);
+                if (idTurma) params.append('turma_id', Number(idTurma)); // Garante que é número
             } else {
-                params.append('aluno_id', dados.alunos[0].aluno_id);
+                // Para aluno VIP/Individual
+                const idAluno = dados.aluno_id || (dados.alunos && dados.alunos[0].aluno_id);
+                if (idAluno) params.append('aluno_id', Number(idAluno)); // Garante que é número
             }
 
-            const res = await fetch(`${API_URL}/aulas/cancelar-grupo?${params.toString()}`, { 
-                method: 'DELETE' 
-            });
+            // 3. Chamada ao servidor
+            const urlCompleta = `${API_URL}/aulas/cancelar-grupo?${params.toString()}`;
+            console.log("Chamando DELETE:", urlCompleta);
+
+            const res = await fetch(urlCompleta, { method: 'DELETE' });
+            const respostaServidor = await res.json();
 
             if (res.ok) {
-                Toast.fire({ icon: 'success', title: 'Aula(s) cancelada(s)!' });
+                Toast.fire({ icon: 'success', title: 'Aula cancelada!' });
                 carregarAgenda();
             } else {
-                const erro = await res.json();
-                Swal.fire('Erro', erro.detail || 'Erro ao cancelar', 'error');
+                // 4. Tratamento amigável para o erro 422 do FastAPI
+                let msgErro = "Erro desconhecido";
+                
+                if (Array.isArray(respostaServidor.detail)) {
+                    // O FastAPI manda uma lista de erros no 422
+                    msgErro = respostaServidor.detail.map(e => `${e.loc[1]}: ${e.msg}`).join("<br>");
+                } else if (typeof respostaServidor.detail === 'string') {
+                    msgErro = respostaServidor.detail;
+                }
+
+                Swal.fire({
+                    title: 'Erro no Servidor',
+                    html: `<div class="text-left text-sm text-red-600 font-mono">${msgErro}</div>`,
+                    icon: 'error'
+                });
             }
         } catch (e) {
-            console.error(e);
+            console.error("Erro técnico:", e);
             Swal.fire('Erro', 'Não foi possível conectar ao servidor.', 'error');
         }
     }

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import Aula, Aluno
+from app.services.lembretes import verificar_lembretes_background
 from app.services.whatsapp import enviar_whatsapp
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -46,5 +47,5 @@ def verificar_lembretes_20min():
 # Configuração do agendador
 scheduler = BackgroundScheduler()
 # Rodar a cada 1 minuto para não perder nenhuma aula
-scheduler.add_job(verificar_lembretes_20min, 'interval', minutes=1)
+scheduler.add_job(verificar_lembretes_background, 'interval', minutes=1)
 scheduler.start()

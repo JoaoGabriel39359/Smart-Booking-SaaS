@@ -9,7 +9,7 @@ from app.routes import alunos, aulas, webhook, turmas
 from app.database import Base, engine, get_db
 from app import models
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.lembretes import verificar_lembretes
+from app.services.lembretes import verificar_lembretes, verificar_lembretes_background
 from datetime import datetime, timedelta
 from fastapi.staticfiles import StaticFiles
 import os
@@ -64,7 +64,7 @@ app.include_router(aulas.router)
 app.include_router(webhook.router) 
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(verificar_lembretes, 'interval', minutes=1)
+scheduler.add_job(verificar_lembretes_background, 'interval', minutes=1)
 
 @app.get("/")
 def home():
