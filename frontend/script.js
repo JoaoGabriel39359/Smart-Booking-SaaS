@@ -37,18 +37,21 @@ async function fetchProtegido(url, opcoes = {}) {
     try {
         const resposta = await fetch(url, { ...opcoes, headers: cabecalhos });
 
-        // Se o token morreu (401), limpa e manda pro login
         if (resposta.status === 401) {
             localStorage.removeItem('token_professor');
-            window.location.href = "/frontend/login.html";
-            return { json: () => [] }; // Devolve uma "falsa lista" vazia pra não quebrar o forEach
+            // Se estiver no painel e der 401, manda pro login
+            if (document.getElementById('listaAgenda')) {
+                window.location.href = "/frontend/login.html";
+            }
+            return { ok: false, json: async () => [] }; 
         }
 
-        if (!resposta.ok) return { json: () => [] };
+        if (!resposta.ok) return { ok: false, json: async () => [] };
 
         return resposta;
     } catch (error) {
-        return { json: () => [] }; // Se a internet cair, também não quebra o JS
+        console.error("Erro na requisição:", error);
+        return { ok: false, json: async () => [] };
     }
 }
 
@@ -831,7 +834,22 @@ function mudarMes(d) {
 
 // Inicialização
 window.onload = () => {
-    carregarAgenda();
+    const token = localStorage.getItem('token_professor');
+    const estaNoPainel = document.getElementById('listaAgenda'); 
+
+    // 1. Só tenta carregar dados se o elemento da agenda existir (ou seja, se estiver no painel)
+    if (estaNoPainel) {
+        if (token) {
+            carregarAgenda();
+            // Você também pode chamar as outras aqui para garantir
+            carregarAlunos();
+            carregarTurmas();
+        } else {
+            // 2. Se cair no painel sem token, expulsa para o login
+            window.location.href = "/frontend/login.html";
+        }
+    }
+    // 3. Se estiver na página de login, o código acima é ignorado e não gera erro 401
 };
 
 async function abrirModalEditarAluno(aluno) {

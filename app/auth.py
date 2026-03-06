@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer 
 
 # --- CONFIGURAÇÕES DE SEGURANÇA JWT ---
-SECRET_KEY = "SUA_CHAVE_MUITO_SECRETA_E_LONGA" 
+SECRET_KEY = "zm50gNdO9resXqU2xxjsLiRgZKvAiWX561gVu4VHeEU" 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480 
 
