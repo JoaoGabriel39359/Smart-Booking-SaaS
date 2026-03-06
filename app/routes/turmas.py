@@ -143,8 +143,13 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
         if not turma:
             raise HTTPException(status_code=404, detail="Turma não encontrada")
 
+        # 1. Buscar os IDs dos alunos desta turma antes de desvinculá-los
+        alunos_ids = [a.id for a in db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).all()]
+
+        # 2. Buscar e remover eventos do Google Agenda
+        # Mudamos a lógica para filtrar pelos IDs dos alunos coletados
         aulas_com_google = db.query(models.HistoricoAula.google_event_id).filter(
-            models.HistoricoAula.aluno.has(turma_id=turma_id),
+            models.HistoricoAula.aluno_id.in_(alunos_ids),
             models.HistoricoAula.google_event_id != None
         ).distinct().all()
 
@@ -152,17 +157,26 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
             try:
                 remover_evento_google(g_id)
             except:
-                pass
+                pass # Se falhar no Google, não trava o banco
 
+        # 3. Limpar o Histórico das Aulas (Deletar por aluno_id é mais seguro no Postgres)
+        if alunos_ids:
+            db.query(models.HistoricoAula).filter(models.HistoricoAula.aluno_id.in_(alunos_ids)).delete(synchronize_session=False)
+
+        # 4. Desvincular Alunos (Setar turma_id como NULL)
         db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).update({"turma_id": None})
-        db.query(models.HistoricoAula).filter(models.HistoricoAula.aluno.has(turma_id=turma_id)).delete(synchronize_session=False)
 
+        # 5. Finalmente, deletar a turma
         db.delete(turma)
+        
         db.commit()
         return {"msg": "Turma e agenda do Google limpas com sucesso!"}
+
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log do erro real para você ver no painel do Render
+        print(f"ERRO AO DELETAR TURMA: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 # --- ADICIONAR ALUNO ---
 @router.post("/{turma_id}/adicionar-aluno/{aluno_id}")
