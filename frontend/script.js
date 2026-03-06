@@ -832,26 +832,6 @@ function mudarMes(d) {
     gerarCalendario();
 }
 
-// Inicialização
-window.onload = () => {
-    const token = localStorage.getItem('token_professor');
-    const estaNoPainel = document.getElementById('listaAgenda'); 
-
-    // 1. Só tenta carregar dados se o elemento da agenda existir (ou seja, se estiver no painel)
-    if (estaNoPainel) {
-        if (token) {
-            carregarAgenda();
-            // Você também pode chamar as outras aqui para garantir
-            carregarAlunos();
-            carregarTurmas();
-        } else {
-            // 2. Se cair no painel sem token, expulsa para o login
-            window.location.href = "/frontend/login.html";
-        }
-    }
-    // 3. Se estiver na página de login, o código acima é ignorado e não gera erro 401
-};
-
 async function abrirModalEditarAluno(aluno) {
     const { value: formValues } = await Swal.fire({
         title: 'Editar Aluno',
@@ -1412,3 +1392,23 @@ async function verRelatorio(alunoId, nomeAluno) {
         Swal.fire('Erro', 'Não foi possível carregar o relatório.', 'error');
     }
 }
+
+// Inicialização
+window.onload = () => {
+    const token = localStorage.getItem('token_professor');
+    const estaNoPainel = document.getElementById('listaAgenda'); 
+
+    // 1. Só tenta carregar dados se o elemento da agenda existir (ou seja, se estiver no painel)
+    if (estaNoPainel) {
+        if (token) {
+            carregarAgenda();
+            // Você também pode chamar as outras aqui para garantir
+            carregarAlunos();
+            carregarTurmas();
+        } else {
+            // 2. Se cair no painel sem token, expulsa para o login
+            window.location.href = "/frontend/login.html";
+        }
+    }
+    // 3. Se estiver na página de login, o código acima é ignorado e não gera erro 401
+};
