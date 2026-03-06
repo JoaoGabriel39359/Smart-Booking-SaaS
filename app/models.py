@@ -71,8 +71,8 @@ class Turma(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome_turma = Column(String, nullable=False) # Use nome_turma para bater com seu JS
     tipo = Column(String, default="TEAM")       # VIP, DUO, TEAM
-    dia_semana = Column(String, nullable=False) # Ex: "Quinta"
-    horario = Column(String, nullable=False)    # Ex: "21:00"
+    dia_semana = Column(String, nullable=True) # Ex: "Quinta"
+    horario = Column(String, nullable=True)    # Ex: "21:00"
     
     # Opcional: Você pode manter capacidade_maxima, 
     # mas o tipo (VIP/DUO) já dita isso na sua lógica JS
