@@ -1,6 +1,6 @@
 const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
     ? 'http://127.0.0.1:8000' 
-    : window.location.origin;
+    : 'https://seu-backend-no-render.onrender.com';
 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
 const diasNome = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 
@@ -22,13 +22,36 @@ function trocarAba(aba) {
     if(aba === 'alunos') carregarAlunos();
     if(aba === 'turmas') carregarTurmas();
     if(aba === 'grade') carregarTudoGrade();
+    if(aba === 'historico') carregarHistoricoGeral();
+}
+
+async function fetchProtegido(url, opcoes = {}) {
+    const token = localStorage.getItem('token_professor');
+    
+    // Adiciona o cabeçalho de autorização automaticamente
+    const cabecalhos = {
+        ...opcoes.headers,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+
+    const resposta = await fetch(url, { ...opcoes, headers: cabecalhos });
+
+    // Se o servidor responder 401 (Token expirado ou inválido), desloga
+    if (resposta.status === 401) {
+        localStorage.removeItem('token_professor');
+        window.location.href = "/frontend/login.html";
+        return;
+    }
+
+    return resposta;
 }
 
 // --- GESTÃO DE ALUNOS (COM NOVOS CAMPOS E CORREÇÃO 422) ---
 async function carregarAlunos() {
     const container = document.getElementById('listaAlunos');
     try {
-        const res = await fetch(`${API_URL}/alunos/`);
+        const res = await fetchProtegido(`${API_URL}/alunos/`);
         const dados = await res.json();
         listaGlobalAlunos = dados;
         
@@ -61,7 +84,11 @@ async function carregarAlunos() {
                         <i class="fa-solid fa-phone"></i> ${aluno.telefone || 'Sem número'}
                     </p>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex gap-3 items-center">
+                    <button onclick="verRelatorio(${aluno.id}, '${aluno.nome}')" class="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Relatório">
+                        <i class="fa-solid fa-chart-line text-lg"></i>
+                    </button>
+                    
                     <button id="edit-${aluno.id}" class="text-indigo-500 hover:text-indigo-700">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
@@ -93,7 +120,7 @@ async function adicionarAlunoNaTurma(turmaId) {
     try {
         // 2. Faz a chamada para o seu backend
         // Note que usamos POST conforme o padrão de alteração de estado
-        const response = await fetch(`/turmas/${turmaId}/adicionar-aluno?aluno_id=${alunoId}`, {
+        const response = await fetchProtegido(`/turmas/${turmaId}/adicionar-aluno?aluno_id=${alunoId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -170,7 +197,7 @@ async function abrirModalAluno() {
 
     if (formValues) {
         try {
-            const res = await fetch(`${API_URL}/alunos/`, {
+            const res = await fetchProtegido(`${API_URL}/alunos/`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(formValues)
@@ -201,7 +228,7 @@ async function deletarAluno(id) {
         confirmButtonText: 'Sim, deletar!'
     }).then(async (result) => {
         if (result.isConfirmed) {
-            await fetch(`${API_URL}/alunos/${id}`, { method: 'DELETE' });
+            await fetchProtegido(`${API_URL}/alunos/${id}`, { method: 'DELETE' });
             carregarAlunos();
             Toast.fire({icon: 'success', title: 'Excluído!'});
         }
@@ -212,7 +239,7 @@ async function deletarAluno(id) {
 async function carregarTurmas() {
     const container = document.getElementById('listaTurmas');
     try {
-        const res = await fetch(`${API_URL}/turmas/`);
+        const res = await fetchProtegido(`${API_URL}/turmas/`);
         const turmas = await res.json();
         
         container.innerHTML = ""; 
@@ -286,11 +313,11 @@ async function carregarTurmas() {
 }
 
 async function abrirModalTurma() {
-    // 1. Busca os alunos sem turma
-    const respAlunos = await fetch(`${API_URL}/alunos/sem-turma`);
-    const alunosLivres = await respAlunos.json();
+    // 1. Buscamos os alunos (Corrigido o nome da variável para não dar erro)
+    const resposta = await fetchProtegido(`${API_URL}/alunos/`);
+    const todosAlunos = await resposta.json();
+    const alunosLivres = todosAlunos.filter(a => !a.turma_id);
 
-    // 2. Cria o HTML da lista de alunos
     let listaAlunosHTML = alunosLivres.map(al => `
         <label class="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer border border-slate-100">
             <input type="checkbox" name="aluno-turma" value="${al.id}" class="rounded text-indigo-600">
@@ -298,11 +325,9 @@ async function abrirModalTurma() {
         </label>
     `).join('');
 
-    if (alunosLivres.length === 0) {
-        listaAlunosHTML = '<p class="text-xs text-red-400">Nenhum aluno disponível sem turma.</p>';
-    }
+    // Variável temporária para os horários
+    let horariosDestaTurma = [];
 
-    // 3. Abre o modal
     const { value: formValues } = await Swal.fire({
         title: 'Criar Nova Turma',
         html: `
@@ -312,21 +337,30 @@ async function abrirModalTurma() {
                     <input id="t-nome" class="swal2-input-custom" placeholder="Ex: Duo de Quinta">
                 </div>
                 
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="text-[10px] font-bold uppercase text-slate-400">Dia</label>
-                        <select id="t-dia" class="swal2-input-custom">
-                            <option value="Segunda">Segunda</option>
-                            <option value="Terça">Terça</option>
-                            <option value="Quarta">Quarta</option>
-                            <option value="Quinta">Quinta</option>
-                            <option value="Sexta">Sexta</option>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <label class="text-[10px] font-bold uppercase text-slate-400 mb-2 block text-indigo-600">Configurar Horários</label>
+                    <div class="flex gap-2 mb-3">
+                        <select id="t-dia-add" class="text-xs p-2 rounded-lg border flex-1 outline-none">
+                            <option value="0">Segunda</option>
+                            <option value="1">Terça</option>
+                            <option value="2">Quarta</option>
+                            <option value="3">Quinta</option>
+                            <option value="4">Sexta</option>
                         </select>
+                        <input type="time" id="t-hora-add" class="text-xs p-2 rounded-lg border w-24 outline-none">
+                        <button type="button" id="btn-add-hora" class="bg-indigo-600 text-white px-4 rounded-lg font-black hover:bg-indigo-700 transition">+</button>
                     </div>
-                    <div>
-                        <label class="text-[10px] font-bold uppercase text-slate-400">Horário</label>
-                        <input id="t-hora" type="time" class="swal2-input-custom">
-                    </div>
+                    <div id="lista-horarios-temp" class="space-y-1"></div>
+                </div>
+
+                <div class="mt-4">
+                    <label class="block text-left text-[10px] font-bold uppercase text-slate-400 mb-1">Duração da Aula</label>
+                    <select id="t-duracao" class="w-full p-2 border rounded-lg text-sm bg-slate-50">
+                        <option value="45">45 minutos</option>
+                        <option value="60" selected>1 hora (Padrão)</option>
+                        <option value="90">1 hora e 30 min</option>
+                        <option value="120">2 horas</option>
+                    </select>
                 </div>
 
                 <div>
@@ -334,51 +368,87 @@ async function abrirModalTurma() {
                     <select id="t-tipo" class="swal2-input-custom">
                         <option value="TEAM">TEAM (até 6)</option>
                         <option value="DUO">DUO (2 alunos)</option>
-                        <option value="VIP">VIP (1 aluno)</option>
                     </select>
                 </div>
 
                 <div>
                     <label class="text-[10px] font-bold uppercase text-slate-400">Selecionar Alunos</label>
-                    <div class="max-h-40 overflow-y-auto mt-2 space-y-1">
-                        ${listaAlunosHTML}
+                    <div class="max-h-32 overflow-y-auto mt-2 space-y-1 p-1 border rounded-lg bg-white">
+                        ${listaAlunosHTML || '<p class="text-[10px] text-slate-400 p-2">Nenhum aluno livre disponível.</p>'}
                     </div>
                 </div>
             </div>
         `,
+        didOpen: () => {
+            const btnAdd = document.getElementById('btn-add-hora');
+            const containerLista = document.getElementById('lista-horarios-temp');
+
+            btnAdd.onclick = () => {
+                const diaSelect = document.getElementById('t-dia-add');
+                const horaInput = document.getElementById('t-hora-add');
+                
+                if(!horaInput.value) {
+                    Toast.fire({ icon: 'warning', title: 'Informe a hora!' });
+                    return;
+                }
+                
+                const novoHorario = { 
+                    dia: parseInt(diaSelect.value), 
+                    hora: horaInput.value 
+                };
+
+                horariosDestaTurma.push(novoHorario);
+                
+                // Atualiza a visualização
+                const nomes = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+                containerLista.innerHTML = horariosDestaTurma.map((h, i) => `
+                    <div class="flex justify-between items-center bg-white p-2 rounded-lg border border-indigo-100 text-[10px] font-black text-indigo-600 shadow-sm animate-in fade-in zoom-in duration-200">
+                        <span><i class="fa-regular fa-clock mr-1"></i> ${nomes[h.dia]} às ${h.hora}</span>
+                        <button type="button" class="text-red-400 hover:text-red-600 p-1" onclick="this.closest('div').remove();">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `).join('');
+            };
+        },
         preConfirm: () => {
             const nome = document.getElementById('t-nome').value;
-            const dia = document.getElementById('t-dia').value;
-            const hora = document.getElementById('t-hora').value;
             const tipo = document.getElementById('t-tipo').value;
             const selecionados = Array.from(document.querySelectorAll('input[name="aluno-turma"]:checked')).map(el => Number(el.value));
 
-            if (!nome || !hora || selecionados.length === 0) {
-                return Swal.showValidationMessage('Preencha o nome, horário e selecione ao menos um aluno.');
+            if (!nome || horariosDestaTurma.length === 0) {
+                return Swal.showValidationMessage('Preencha o nome e adicione pelo menos um horário no botão "+"');
+            }
+            if (selecionados.length === 0) {
+                return Swal.showValidationMessage('Selecione pelo menos um aluno');
             }
 
             return { 
-                nome_turma: nome, // <--- Aqui deve bater com o Python
-                tipo: tipo, 
-                dia_semana: dia, 
-                horario: hora, 
+                nome_turma: nome,
+                tipo: tipo,
+                duracao_minutos: document.getElementById('t-duracao').value,
+                horarios: horariosDestaTurma,
                 aluno_ids: selecionados 
             };
         }
     });
 
     if (formValues) {
-        const res = await fetch(`${API_URL}/turmas/`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(formValues)
-        });
-        if (res.ok) {
-            Toast.fire({icon: 'success', title: 'Turma criada!'});
-            carregarTurmas();
-        } else {
-            const err = await res.json();
-            Swal.fire("Erro", err.detail || "Erro ao criar", "error");
+        try {
+            const res = await fetchProtegido(`${API_URL}/turmas/`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(formValues)
+            });
+            if (res.ok) { 
+                carregarTurmas(); 
+                Toast.fire({icon:'success', title:'Turma e horários criados!'}); 
+            } else {
+                const erro = await res.json();
+                Swal.fire('Erro', erro.detail || 'Erro ao criar turma', 'error');
+            }
+        } catch (e) {
+            console.error(e);
         }
     }
 }
@@ -394,7 +464,7 @@ async function deletarTurma(id) {
     });
 
     if (confirmar.isConfirmed) {
-        const res = await fetch(`${API_URL}/turmas/${id}`, { method: 'DELETE' });
+        const res = await fetchProtegido(`${API_URL}/turmas/${id}`, { method: 'DELETE' });
         if (res.ok) {
             Toast.fire({icon: 'success', title: 'Turma removida'});
             carregarTurmas();
@@ -406,7 +476,7 @@ async function deletarTurma(id) {
 async function carregarAgenda() {
     const container = document.getElementById('listaAgenda');
     try {
-        const res = await fetch(`${API_URL}/aulas/lista-professor`);
+        const res = await fetchProtegido(`${API_URL}/aulas/lista-professor`);
         const aulas = await res.json();
         
         container.innerHTML = aulas.length ? '' : '<p class="col-span-full text-slate-400 py-10 text-center">Nenhuma aula agendada.</p>';
@@ -473,38 +543,90 @@ async function carregarAgenda() {
                 const btnCancel = document.getElementById(`btn-cancelar-${i}`);
                 if(btnCancel) btnCancel.onclick = () => cancelarAulaGrupo(a);
                 const btn = document.getElementById(`btn-chamada-${i}`);
-                if(btn) btn.onclick = () => abrirChamada(a); 
+                if(btn) btn.onclick = () => abrirChamadaRetroativa(a, false);
             }, 0);
         });
     } catch (e) { console.error("Erro na agenda", e); }
 }
 
 // FUNÇÃO QUE ABRE O POPUP DE CHAMADA E NOTA
-async function abrirChamada(dadosAgrupados) {
-    // 1. Geramos a lista de presença para cada aluno da turma/VIP
-    const listaAlunosHtml = dadosAgrupados.alunos.map(al => `
-        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2">
-            <span class="font-bold text-slate-700 text-sm">${al.nome}</span>
-            <select id="status-${al.aula_id}" class="border-2 border-slate-200 rounded-lg p-1 text-xs font-bold outline-none focus:border-indigo-500">
-                <option value="presente">✅ Presente</option>
-                <option value="ausente">❌ Ausente</option>
-            </select>
-        </div>
-    `).join('');
+// ==========================================
+// PORTAS DE ENTRADA (Nomes que seu código já usa)
+// ==========================================
+
+async function abrirChamada(dados) {
+    await abrirLogicaUniversal(dados, false);
+}
+
+async function abrirChamadaRetroativa(dados, ehRetroativa) {
+    await abrirLogicaUniversal(dados, ehRetroativa);
+}
+
+async function abrirChamadaRetroativaGrupo(nomeExibicao, alunosJSON) {
+    try {
+        // Converte a string de alunos de volta para objeto
+        const alunos = typeof alunosJSON === 'string' ? JSON.parse(alunosJSON) : alunosJSON;
+        
+        // Monta o objeto no formato que a Lógica Universal espera
+        const dadosFormatados = {
+            nome_exibicao: nomeExibicao,
+            alunos: alunos
+        };
+        
+        await abrirLogicaUniversal(dadosFormatados, true);
+    } catch (e) {
+        console.error("Erro ao abrir chamada do histórico:", e);
+        Swal.fire("Erro", "Não foi possível carregar os alunos desta sessão.", "error");
+    }
+}
+
+// ==========================================
+// CÉREBRO UNIFICADO (Usando o seu HTML que funciona)
+// ==========================================
+async function abrirLogicaUniversal(dadosAgrupados, ehRetroativa) {
+    let dados;
+    try {
+        dados = typeof dadosAgrupados === 'string' ? JSON.parse(dadosAgrupados) : dadosAgrupados;
+    } catch (e) {
+        console.error("Erro nos dados:", e);
+        return;
+    }
+
+    const listaAlunos = dados.alunos;
+    const base = listaAlunos[0];
+    
+    // Pegamos o desempenho do banco (ex: "Bom", "Médio", "Ruim")
+    const notaBanco = base.desempenho || "";
+
+    const listaAlunosHtml = listaAlunos.map(al => {
+        const idUnico = ehRetroativa ? al.historico_id : al.aula_id;
+        const statusPresente = ehRetroativa ? al.status_presenca : (al.status === 'presente');
+        
+        return `
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2">
+                <span class="font-bold text-slate-700 text-sm">${al.nome}</span>
+                <select id="status-${idUnico}" class="border-2 border-slate-200 rounded-lg p-1 text-xs font-bold outline-none focus:border-indigo-500">
+                    <option value="presente" ${statusPresente ? 'selected' : ''}>✅ Presente</option>
+                    <option value="ausente" ${!statusPresente ? 'selected' : ''}>❌ Ausente</option>
+                </select>
+            </div>
+        `;
+    }).join('');
 
     const { value: formValues } = await Swal.fire({
-        title: `<span class="text-slate-700">Chamada:</span> <span class="text-indigo-900">${dadosAgrupados.nome_exibicao}</span>`,
+        title: `<div class="flex flex-col items-center gap-1">
+                    <span class="text-[10px] uppercase text-slate-400 font-black tracking-widest">${ehRetroativa ? 'Chamada Retroativa' : 'Chamada de Aula'}</span>
+                    <span class="text-indigo-900 font-black text-xl italic">${dados.nome_exibicao}</span>
+                </div>`,
         html: `
             <div class="text-left space-y-4 p-2">
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Lista de Presença</label>
-                <div class="max-h-40 overflow-y-auto pr-1">
-                    ${listaAlunosHtml}
-                </div>
-
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Desempenho da Turma</label>
+                <div class="max-h-48 overflow-y-auto pr-1">${listaAlunosHtml}</div>
+                
+                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Desempenho</label>
                 <div class="grid grid-cols-3 gap-3">
+                    
                     <label class="cursor-pointer">
-                        <input type="radio" name="nota" value="Ruim" class="peer hidden">
+                        <input type="radio" name="nota" value="Ruim" class="peer hidden" ${notaBanco === 'Ruim' ? 'checked' : ''}>
                         <div class="text-center p-3 border-2 border-slate-100 rounded-xl transition-all peer-checked:bg-red-50 peer-checked:border-red-500 peer-checked:scale-95">
                             <div class="text-xl mb-1">🙁</div>
                             <div class="text-[10px] font-bold text-slate-600 uppercase">Ruim</div>
@@ -512,7 +634,7 @@ async function abrirChamada(dadosAgrupados) {
                     </label>
 
                     <label class="cursor-pointer">
-                        <input type="radio" name="nota" value="Médio" class="peer hidden">
+                        <input type="radio" name="nota" value="Médio" class="peer hidden" ${notaBanco === 'Médio' ? 'checked' : ''}>
                         <div class="text-center p-3 border-2 border-slate-100 rounded-xl transition-all peer-checked:bg-yellow-50 peer-checked:border-yellow-500 peer-checked:scale-95">
                             <div class="text-xl mb-1">😐</div>
                             <div class="text-[10px] font-bold text-slate-600 uppercase">Médio</div>
@@ -520,66 +642,55 @@ async function abrirChamada(dadosAgrupados) {
                     </label>
 
                     <label class="cursor-pointer">
-                        <input type="radio" name="nota" value="Bom" class="peer hidden" checked>
+                        <input type="radio" name="nota" value="Bom" class="peer hidden" ${(!notaBanco || notaBanco === 'Bom') ? 'checked' : ''}>
                         <div class="text-center p-3 border-2 border-slate-100 rounded-xl transition-all peer-checked:bg-green-50 peer-checked:border-green-500 peer-checked:scale-95">
                             <div class="text-xl mb-1">🤩</div>
                             <div class="text-[10px] font-bold text-slate-600 uppercase">Bom</div>
                         </div>
                     </label>
+
                 </div>
 
-                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mt-4">Conteúdo Estudado (Geral)</label>
-                <textarea id="ch-obs" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm h-24 focus:border-indigo-500 outline-none transition-all" placeholder="O que foi trabalhado hoje?"></textarea>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Conteúdo / Obs</label>
+                <textarea id="ch-obs-universal" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm h-24 focus:border-indigo-500 outline-none">${base.observacao || ''}</textarea>
             </div>
         `,
         showCancelButton: true,
-        confirmButtonText: 'Confirmar Chamada',
-        cancelButtonText: 'Voltar',
-        confirmButtonColor: '#2563eb',
-        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Salvar Registro',
+        confirmButtonColor: '#4f46e5',
         preConfirm: () => {
-            // Mapeamos a presença de cada aluno individualmente
-            return dadosAgrupados.alunos.map(al => ({
-                aula_id: al.aula_id,
-                status: document.getElementById(`status-${al.aula_id}`).value,
-                desempenho: document.querySelector('input[name="nota"]:checked').value,
-                observacoes: document.getElementById('ch-obs').value
-            }));
+            return listaAlunos.map(al => {
+                const idUnico = ehRetroativa ? al.historico_id : al.aula_id;
+                return {
+                    id: idUnico,
+                    status: document.getElementById(`status-${idUnico}`).value,
+                    desempenho: document.querySelector('input[name="nota"]:checked').value,
+                    observacao: document.getElementById('ch-obs-universal').value
+                };
+            });
         }
     });
 
     if (formValues) {
-        try {
-            // Como agora temos uma lista de presenças (mesmo que seja só 1 aluno VIP), fazemos um loop
-            let falhas = 0;
-            
-            for (const chamada of formValues) {
-                const url = `${API_URL}/aulas/${chamada.aula_id}/presenca?status=${chamada.status}&desempenho=${chamada.desempenho}&observacoes=${encodeURIComponent(chamada.observacoes)}`;
-                const res = await fetch(url, { method: 'PATCH' });
-                if (!res.ok) falhas++;
-            }
-            
-            if (falhas === 0) {
-                Toast.fire({ icon: 'success', title: 'Chamada realizada com sucesso!' });
-                carregarAgenda();
-            } else {
-                Swal.fire('Atenção', `Chamada concluída, mas ${falhas} registros falharam.`, 'warning');
-            }
-        } catch (e) {
-            console.error(e);
-            Swal.fire('Erro', 'Falha na comunicação com o servidor', 'error');
+        for (const item of formValues) {
+            const params = new URLSearchParams({ status: item.status, desempenho: item.desempenho, observacao: item.observacao });
+            const rota = ehRetroativa ? `/aulas/admin/presenca-retroativa/${item.id}` : `/aulas/${item.id}/presenca`;
+            await fetchProtegido(`${API_URL}${rota}?${params.toString()}`, { method: 'PATCH' });
         }
+        Toast.fire({ icon: 'success', title: 'Registro atualizado!' });
+        if (ehRetroativa) carregarHistoricoGeral(); else carregarAgenda();
     }
 }
 
 async function cancelarAula(id) {
     if(confirm("Deseja cancelar esta aula?")) {
-        await fetch(`${API_URL}/aulas/${id}`, { method: 'DELETE' });
+        await fetchProtegido(`${API_URL}/aulas/${id}`, { method: 'DELETE' });
         carregarAgenda();
     }
 }
 
 // --- GRADE BASE E CALENDÁRIO ---
+// --- MODIFICAÇÃO NA FUNÇÃO DE GERAR CALENDÁRIO ---
 function gerarCalendario() {
     const grid = document.getElementById('calendarioMensal');
     const labelMes = document.getElementById('mesAtualExtenso');
@@ -600,13 +711,49 @@ function gerarCalendario() {
     
     for (let dia = 1; dia <= ultimoDia; dia++) {
         const ehHoje = (new Date()).toDateString() === (new Date(ano, mes, dia)).toDateString();
+        // ADICIONADO: id="dia-container-${dia}" para podermos inserir as aulas depois
         grid.innerHTML += `
             <div onclick="selecionarDia(this, ${dia}, ${new Date(ano,mes,dia).getDay()})" 
-                 class="bg-white h-24 p-2 border border-slate-100 hover:border-indigo-500 cursor-pointer transition-colors relative">
-                <span class="text-xs font-black ${ehHoje ? 'bg-indigo-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-300'}">
+                 class="bg-white h-24 p-1 border border-slate-100 hover:border-indigo-500 cursor-pointer transition-colors relative overflow-y-auto">
+                <span class="text-[10px] font-black ${ehHoje ? 'bg-indigo-600 text-white w-5 h-5 flex items-center justify-center rounded-full' : 'text-slate-300'}">
                     ${dia}
                 </span>
+                <div id="eventos-dia-${dia}" class="flex flex-col gap-1 mt-1"></div>
             </div>`;
+    }
+
+    // CHAMADA NOVA: Assim que termina de desenhar o calendário, busca as aulas
+    renderizarAulasNoCalendario(mes, ano);
+}
+
+// --- FUNÇÃO NOVA PARA PREENCHER O CALENDÁRIO ---
+async function renderizarAulasNoCalendario(mesAtual, anoAtual) {
+    try {
+        // Busca todas as sessões do histórico que você já tem no backend
+        const res = await fetchProtegido(`${API_URL}/aulas/admin/historico-geral`);
+        const sessoes = await res.json();
+
+        sessoes.forEach(sessao => {
+            // A data que vem do backend (sessao.data) costuma ser YYYY-MM-DD
+            const dataAula = new Date(sessao.data + "T00:00:00"); // Força fuso local
+            
+            // Verifica se a aula pertence ao mês e ano que o professor está vendo
+            if (dataAula.getMonth() === mesAtual && dataAula.getFullYear() === anoAtual) {
+                const dia = dataAula.getDate();
+                const container = document.getElementById(`eventos-dia-${dia}`);
+                
+                if (container) {
+                    // Adiciona uma pequena "pílula" visual para cada aula
+                    const pill = document.createElement('div');
+                    pill.className = "text-[7px] px-1 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-100 truncate font-black uppercase tracking-tighter";
+                    pill.innerText = sessao.nome_exibicao;
+                    pill.title = sessao.nome_exibicao; // Mostra nome completo ao passar o mouse
+                    container.appendChild(pill);
+                }
+            }
+        });
+    } catch (e) {
+        console.error("Erro ao carregar aulas no calendário:", e);
     }
 }
 
@@ -626,7 +773,7 @@ async function carregarTudoGrade() {
 
 async function carregarGridSemanal() {
     try {
-        const res = await fetch(`${API_URL}/aulas/grade`);
+        const res = await fetchProtegido(`${API_URL}/aulas/grade`);
         const grade = await res.json();
         const container = document.getElementById('gridSemanal');
         container.innerHTML = '';
@@ -652,7 +799,7 @@ async function carregarGridSemanal() {
 }
 
 async function deletarTurno(id) {
-    await fetch(`${API_URL}/aulas/grade/${id}`, { method: 'DELETE' });
+    await fetchProtegido(`${API_URL}/aulas/grade/${id}`, { method: 'DELETE' });
     carregarGridSemanal();
 }
 
@@ -663,7 +810,7 @@ document.getElementById('formGrade').onsubmit = async (e) => {
     const fim = document.getElementById('fimGrade').value;
     if(dia === "") return Toast.fire({icon:'warning', title:'Selecione um dia no calendário'});
     
-    await fetch(`${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}`, {method: 'POST'});
+    await fetchProtegido(`${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}`, {method: 'POST'});
     Toast.fire({icon: 'success', title: 'Horário salvo!'});
     carregarTudoGrade();
 };
@@ -716,7 +863,7 @@ async function abrirModalEditarAluno(aluno) {
     });
 
     if (formValues) {
-        const res = await fetch(`${API_URL}/alunos/${aluno.id}`, {
+        const res = await fetchProtegido(`${API_URL}/alunos/${aluno.id}`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(formValues)
@@ -733,7 +880,7 @@ async function abrirModalEditarAluno(aluno) {
 
 async function abrirModalAdicao(turmaId, tipoTurma) {
     // 1. Busca alunos sem turma no backend
-    const response = await fetch('/alunos/sem-turma');
+    const response = await fetchProtegido('/alunos/sem-turma');
     const alunosLivres = await response.json();
 
     const select = document.getElementById(`select-alunos-livres-${turmaId}`);
@@ -748,32 +895,9 @@ async function abrirModalAdicao(turmaId, tipoTurma) {
 }
 
 async function gerarAulasDoMes() {
-    // Feedback visual de carregamento
-    Toast.fire({ icon: 'info', title: 'Gerando agenda...', timer: 1500 });
-
-    try {
-        const res = await fetch(`${API_URL}/turmas/gerar-mensal`, {
-            method: 'POST'
-        });
-        const dados = await res.json();
-
-        if (res.ok) {
-            Swal.fire('Sucesso!', dados.msg, 'success');
-            // Se você tiver uma função para carregar a agenda/calendário, chame-a aqui
-            if (typeof carregarAgenda === "function") carregarAgenda();
-        } else {
-            Swal.fire('Erro', dados.detail || 'Erro ao gerar aulas', 'error');
-        }
-    } catch (e) {
-        console.error(e);
-        Swal.fire('Erro', 'Não foi possível conectar ao servidor.', 'error');
-    }
-}
-
-async function gerarAulasDoMes() {
     const confirmacao = await Swal.fire({
         title: 'Gerar agenda do mês?',
-        text: "O sistema criará automaticamente todas as aulas deste mês baseadas nos horários fixos das turmas.",
+        text: "O sistema criará automaticamente todas as aulas deste mês baseadas nos horários fixos das turmas e enviará para o Google Agenda.",
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#10b981', // Cor emerald
@@ -782,16 +906,22 @@ async function gerarAulasDoMes() {
     });
 
     if (confirmacao.isConfirmed) {
-        // Mostra um carregando enquanto o Python trabalha
-        Swal.fire({ title: 'Gerando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        // Mostra o "carregando" (importante porque o Google Agenda demora uns segundos para responder)
+        Swal.fire({ 
+            title: 'Sincronizando com Google...', 
+            allowOutsideClick: false, 
+            didOpen: () => { Swal.showLoading(); } 
+        });
 
         try {
-            const res = await fetch(`${API_URL}/turmas/gerar-mensal`, { method: 'POST' });
+            const res = await fetchProtegido(`${API_URL}/turmas/gerar-mensal`, { method: 'POST' });
             const dados = await res.json();
 
             if (res.ok) {
-                Swal.fire('Sucesso!', dados.msg, 'success');
-                // Recarrega a agenda automaticamente para as aulas aparecerem
+                Swal.fire('Sucesso!', 'Histórico e Google Agenda atualizados para os próximos 30 dias!', 'success');
+                
+                // Recarrega as listas para as aulas novas aparecerem na tela
+                if (typeof carregarHistoricoGeral === "function") carregarHistoricoGeral();
                 if (typeof carregarAgenda === "function") carregarAgenda();
             } else {
                 Swal.fire('Erro', dados.detail || 'Erro ao gerar aulas', 'error');
@@ -804,7 +934,7 @@ async function gerarAulasDoMes() {
 
 async function abrirModalAgendamentoAvulso() {
     // 1. Buscamos todos os alunos para preencher o select
-    const res = await fetch(`${API_URL}/alunos/`);
+    const res = await fetchProtegido(`${API_URL}/alunos/`);
     const alunos = await res.json();
 
     const optionsAlunos = alunos.map(al => 
@@ -843,14 +973,27 @@ async function abrirModalAgendamentoAvulso() {
 
 async function enviarAgendamentoAvulso(dados) {
     try {
-        const res = await fetch(`${API_URL}/aulas/avulsa`, {
+        const res = await fetchProtegido(`${API_URL}/aulas/avulsa`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
         });
 
         if (res.ok) {
-            Toast.fire({ icon: 'success', title: 'Aula agendada!' });
+            const resposta = await res.json();
+            
+            // Verifica se o Google Calendar falhou (conforme mudamos no Python)
+            if (resposta.google_sync === false) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Aula agendada!',
+                    text: 'A aula foi salva, mas houve uma falha na sincronização com o Google Agenda. O professor precisará verificar manualmente.',
+                    confirmButtonColor: '#f59e0b'
+                });
+            } else {
+                Toast.fire({ icon: 'success', title: 'Aula agendada com sucesso!' });
+            }
+            
             carregarAgenda(); // Atualiza a lista de aulas
         } else {
             const erro = await res.json();
@@ -870,7 +1013,7 @@ async function salvarEdicaoAluno(id) {
 
     console.log("Dados que estou enviando:", dados); // VEJA ISSO NO F12 DO NAVEGADOR
 
-    const res = await fetch(`/alunos/${id}`, {
+    const res = await fetchProtegido(`/alunos/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dados)
@@ -891,7 +1034,7 @@ async function prepararAdicao(turmaId, tipoTurma, totalAlunos, limiteMax) {
     
     try {
         // Busca alunos que não estão em nenhuma turma
-        const res = await fetch(`${API_URL}/alunos/`);
+        const res = await fetchProtegido(`${API_URL}/alunos/`);
         const todosAlunos = await res.json();
         
         // Filtra alunos que NÃO têm turma_id ou que o turma_id seja null
@@ -924,7 +1067,7 @@ async function confirmarAdicao(turmaId) {
     if (!alunoId) return Swal.fire("Atenção", "Selecione um aluno!", "warning");
 
     try {
-        const res = await fetch(`${API_URL}/turmas/${turmaId}/adicionar-aluno/${alunoId}`, {
+        const res = await fetchProtegido(`${API_URL}/turmas/${turmaId}/adicionar-aluno/${alunoId}`, {
             method: 'POST'
         });
 
@@ -943,7 +1086,7 @@ async function confirmarAdicao(turmaId) {
 
 async function verHistorico(alunoId, alunoNome) {
     try {
-        const res = await fetch(`${API_URL}/aulas/historico/${alunoId}`);
+        const res = await fetchProtegido(`${API_URL}/aulas/historico/${alunoId}`);
         const dados = await res.json();
 
         let conteudoHtml = '';
@@ -1042,7 +1185,7 @@ async function cancelarAulaGrupo(dados) {
             const urlCompleta = `${API_URL}/aulas/cancelar-grupo?${params.toString()}`;
             console.log("Chamando DELETE:", urlCompleta);
 
-            const res = await fetch(urlCompleta, { method: 'DELETE' });
+            const res = await fetchProtegido(urlCompleta, { method: 'DELETE' });
             const respostaServidor = await res.json();
 
             if (res.ok) {
@@ -1069,5 +1212,176 @@ async function cancelarAulaGrupo(dados) {
             console.error("Erro técnico:", e);
             Swal.fire('Erro', 'Não foi possível conectar ao servidor.', 'error');
         }
+    }
+}
+
+async function carregarEstatisticas() {
+    try {
+        const res = await fetchProtegido(`${API_URL}/aulas/admin/estatisticas-mes`);
+        const d = await res.json();
+
+        const statTaxa = document.getElementById('statTaxa');
+        const statTotal = document.getElementById('statTotal');
+        const statFaltosos = document.getElementById('statFaltosos');
+
+        // 1. Atualiza os valores de texto
+        statTaxa.innerText = `${d.taxa_presenca}%`;
+        statTotal.innerText = d.total_aulas;
+
+        // 2. Lógica de Cores Dinâmicas para a Taxa de Frequência
+        // Removemos as cores antigas antes de aplicar a nova
+        statTaxa.classList.remove('text-indigo-900', 'text-red-600', 'text-yellow-600', 'text-green-600');
+        
+        if (d.taxa_presenca < 50) {
+            statTaxa.classList.add('text-red-600');    // Crítico (Vermelho)
+        } else if (d.taxa_presenca < 85) {
+            statTaxa.classList.add('text-yellow-600'); // Atenção (Amarelo)
+        } else {
+            statTaxa.classList.add('text-green-600');  // Ótimo (Verde)
+        }
+
+        // 3. Atualiza a lista de alunos faltosos
+        const listaFaltosos = d.alunos_faltosos
+            .map(a => `${a.nome} (${a.faltas})`)
+            .join(', ');
+        
+        statFaltosos.innerText = d.alunos_faltosos.length > 0 
+            ? `Crítico: ${listaFaltosos}` 
+            : "Todos os alunos em dia!";
+            
+    } catch (e) {
+        console.error("Erro ao carregar stats", e);
+    }
+}
+
+async function carregarHistoricoGeral() {
+    const container = document.getElementById('listaHistoricoGeral');
+    if (!container) return;
+    
+    container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-slate-400">Carregando...</td></tr>';
+    
+    try {
+        carregarEstatisticas();
+
+        const res = await fetchProtegido(`${API_URL}/aulas/admin/historico-geral`);
+        const sessoes = await res.json();
+        
+        container.innerHTML = "";
+        if (!sessoes || sessoes.length === 0) {
+            container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-slate-400">Nenhum registro encontrado.</td></tr>';
+            return;
+        }
+
+        sessoes.forEach((sessao, index) => {
+            const dataFmt = new Date(sessao.data).toLocaleDateString('pt-BR');
+            const totalAlunos = sessao.alunos.length;
+            
+            // Transformamos a lista de alunos em texto seguro para passar pro botão
+            const alunosJSON = JSON.stringify(sessao.alunos).replace(/"/g, '&quot;');
+
+            container.innerHTML += `
+                <tr class="border-b hover:bg-slate-50 transition">
+                    <td class="p-4 font-bold text-slate-700">${dataFmt}</td>
+                    <td class="p-4">
+                        <div class="flex flex-col">
+                            <span class="font-black text-indigo-900 uppercase italic tracking-tighter">${sessao.nome_exibicao}</span>
+                            <span class="text-[9px] text-slate-400 font-bold uppercase">${sessao.is_turma ? 'Grupo / Duo' : 'Individual'}</span>
+                        </div>
+                    </td>
+                    <td class="p-4 text-center">
+                        <span class="px-2 py-1 rounded-md bg-slate-100 text-slate-500 font-black text-[10px]">
+                            ${totalAlunos} ALUNO(S)
+                        </span>
+                    </td>
+                    <td class="p-4 text-center">
+                        <button onclick="abrirChamadaRetroativaGrupo('${sessao.nome_exibicao}', '${alunosJSON}')" 
+                            class="bg-indigo-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition flex items-center gap-2 mx-auto shadow-lg shadow-indigo-100">
+                            <i class="fa-solid fa-clipboard-user"></i> Ver Chamada
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-red-400">Erro ao processar histórico.</td></tr>';
+    }
+}
+
+
+function filtrarHistorico() {
+    const input = document.getElementById("buscaHistorico");
+    const filtro = input.value.toLowerCase();
+    const tabela = document.getElementById("listaHistoricoGeral");
+    const linhas = tabela.getElementsByTagName("tr");
+
+    for (let i = 0; i < linhas.length; i++) {
+        // Pega o texto da coluna Data (0) e Aluno (1)
+        const colunaData = linhas[i].getElementsByTagName("td")[0];
+        const colunaAluno = linhas[i].getElementsByTagName("td")[1];
+        
+        if (colunaData || colunaAluno) {
+            const textoData = colunaData.textContent || colunaData.innerText;
+            const textoAluno = colunaAluno.textContent || colunaAluno.innerText;
+            
+            // Se o que o usuário digitou estiver na data ou no nome do aluno, mostra a linha
+            if (textoData.toLowerCase().indexOf(filtro) > -1 || textoAluno.toLowerCase().indexOf(filtro) > -1) {
+                linhas[i].style.display = "";
+            } else {
+                linhas[i].style.display = "none";
+            }
+        }
+    }
+}
+
+
+async function verRelatorio(alunoId, nomeAluno) {
+    Swal.fire({ title: 'Carregando relatório...', didOpen: () => { Swal.showLoading(); } });
+
+    try {
+        const res = await fetchProtegido(`${API_URL}/aulas/relatorio-aluno/${alunoId}`);
+        const dados = await res.json();
+
+        if (dados.length === 0) {
+            Swal.fire('Vazio', 'Este aluno ainda não possui aulas registradas no histórico.', 'info');
+            return;
+        }
+
+        // Monta a tabela em HTML
+        let tabelaHtml = `
+            <div class="max-h-96 overflow-y-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b bg-slate-50">
+                            <th class="p-2">Data</th>
+                            <th class="p-2">Presença</th>
+                            <th class="p-2">Avaliação/Desempenho</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${dados.map(h => `
+                            <tr class="border-b hover:bg-slate-50">
+                                <td class="p-2 font-bold">${h.data}</td>
+                                <td class="p-2 text-center">${h.presenca}</td>
+                                <td class="p-2">
+                                    <div class="font-medium text-blue-600">${h.desempenho}</div>
+                                    <div class="text-[10px] text-slate-400 italic">${h.observacao}</div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        Swal.fire({
+            title: `Relatório: ${nomeAluno}`,
+            html: tabelaHtml,
+            width: '600px',
+            confirmButtonText: 'Fechar'
+        });
+
+    } catch (e) {
+        Swal.fire('Erro', 'Não foi possível carregar o relatório.', 'error');
     }
 }

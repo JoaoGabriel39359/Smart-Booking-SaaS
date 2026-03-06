@@ -1,49 +1,46 @@
-from fastapi import FastAPI, Request, Depends, Form
-from contextlib import asynccontextmanager
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from app.services.google_calendar import criar_evento, remover_evento_google
-from fastapi.templating import Jinja2Templates # Importante para o Portal
-from sqlalchemy.orm import Session
-from app.routes import alunos, aulas, webhook, turmas 
-from app.database import Base, engine, get_db
-from app import models
-from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.lembretes import verificar_lembretes, verificar_lembretes_background
-from datetime import datetime, timedelta
-from fastapi.staticfiles import StaticFiles
 import os
-
-# Cria as tabelas no banco
-from fastapi import FastAPI, Request, Depends, Form
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from app.services.google_calendar import criar_evento, remover_evento_google
 from fastapi.templating import Jinja2Templates
+
 from sqlalchemy.orm import Session
+from apscheduler.schedulers.background import BackgroundScheduler
+
+# Importações do seu projeto
+from app.services.google_calendar import criar_evento, remover_evento_google
 from app.routes import alunos, aulas, webhook, turmas 
 from app.database import Base, engine, get_db
 from app import models
-from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.lembretes import verificar_lembretes
-from datetime import datetime, timedelta
-import os
+from app.services.lembretes import verificar_lembretes_background
+from app.services.gerar_agenda import gerar_aulas_da_semana
+from app.auth import criar_token_acesso, pwd_context
 
-# --- LÓGICA DE CAMINHOS ABSOLUTOS ---
-# Pega o caminho de onde o main.py está (dentro da pasta /app)
+# --- LÓGICA DE CAMINHOS ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Sobe um nível para chegar na raiz (não importa se chama agenda_saas ou smart_booking_saas)
+STATIC_PATH = os.path.join(CURRENT_DIR, "static")
+TEMPLATES_PATH = os.path.join(CURRENT_DIR, "templates")
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
+SENHA_MESTRA_HASH = pwd_context.hash("8899jgvb")
 
-# Cria as tabelas no banco
-Base.metadata.create_all(bind=engine)
+# --- AGENDADOR (SCHEDULER) ---
+# Definimos aqui antes do lifespan para evitar erro de "não definido"
+scheduler = BackgroundScheduler()
+scheduler.add_job(verificar_lembretes_background, 'interval', minutes=1)
+scheduler.add_job(gerar_aulas_da_semana, 'cron', day_of_week='mon', hour=0, minute=0)
 
+# --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Sistema Agenda SaaS Iniciado")
     if not scheduler.running:
         scheduler.start()
+    # Cria as tabelas ao iniciar
+    Base.metadata.create_all(bind=engine)
     yield
     print("🛑 Sistema Encerrado")
     if scheduler.running:
@@ -51,20 +48,37 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Agenda SaaS", lifespan=lifespan)
 
-# --- CONFIGURAÇÃO DE PASTAS ESTÁTICAS ---
-# Usando caminhos absolutos forçados para o Render não se perder
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "app", "static")), name="static")
-app.mount("/frontend", StaticFiles(directory=os.path.join(BASE_DIR, "frontend")), name="frontend")
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "app", "templates"))
+# --- MIDDLEWARE / STATIC ---
+app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
+app.mount("/frontend", StaticFiles(directory=os.path.abspath(FRONTEND_PATH)), name="frontend")
+templates = Jinja2Templates(directory=TEMPLATES_PATH)
 
-# Inclusão de Rotas
+# --- ROTAS ---
 app.include_router(turmas.router)
 app.include_router(alunos.router)
 app.include_router(aulas.router)
-app.include_router(webhook.router) 
+app.include_router(webhook.router)
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(verificar_lembretes_background, 'interval', minutes=1)
+@app.post("/token")
+async def login(dados: dict):
+    usuario_db = "admin"
+    
+    # Pegamos o que veio do formulário
+    username = dados.get("username")
+    password = dados.get("password")
+
+    # Verificamos se o usuário bate e se a senha confere com o hash fixo
+    if username != usuario_db or not pwd_context.verify(password, SENHA_MESTRA_HASH):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Credenciais inválidas"
+        )
+
+    # Se passou, gera o token
+    token = criar_token_acesso(dados={"sub": usuario_db})
+    return {"access_token": token, "token_type": "bearer"}
+
+# --- ROTAS DE PÁGINAS ---
 
 @app.get("/")
 def home():
@@ -133,40 +147,30 @@ async def reagendar_aula(
         return "Acesso negado: Token inválido."
 
     try:
-        # 1. Converte a data e define o fim da aula (1 hora depois)
-        data_dt = datetime.strptime(nova_data, "%Y-%m-%dT%H:%M")
+        # 1. Conversão de Data Robusta
+        # Aceita formatos ISO (T) e formatos com espaço, com ou sem segundos
+        try:
+            nova_data_limpa = nova_data.replace("T", " ")
+            if len(nova_data_limpa) == 16:  # Formato YYYY-MM-DD HH:MM
+                data_dt = datetime.strptime(nova_data_limpa, "%Y-%m-%d %H:%M")
+            else:  # Formato com segundos ou ISO completo
+                data_dt = datetime.fromisoformat(nova_data.replace("Z", ""))
+        except Exception as e:
+            print(f"❌ Erro na conversão de data: {nova_data} -> {e}")
+            return f"Erro no formato da data enviada: {nova_data}"
+
         data_fim_dt = data_dt + timedelta(hours=1)
 
-        if aula_id == 0:  # Nova aula
-            inicio_semana = data_dt - timedelta(days=data_dt.weekday())
-            fim_semana = inicio_semana + timedelta(days=6, hours=23, minutes=59)
-
-            contagem = db.query(models.Aula).filter(
-                models.Aula.aluno_id == aluno.id,
-                models.Aula.status == "marcada",
-                models.Aula.data_inicio >= inicio_semana,
-                models.Aula.data_inicio <= fim_semana
-            ).count()
-
-            if contagem >= (aluno.limite_aulas_semana or 1):
-                return f"Erro: Você já atingiu seu limite de {aluno.limite_aulas_semana} aulas para esta semana."
-
-            if aluno.creditos_reposicao <= 0:
-                return "Erro: Você não possui créditos de reposição suficientes."
-        
-        g_id = None # Variável para guardar o ID do Google
-
-        # --- CASO A: NOVA REPOSIÇÃO (Criar no Google) ---
         if aula_id == 0:
             if aluno.creditos_reposicao <= 0:
-                return "Erro: Você não possui créditos de reposição suficientes."
+                return HTMLResponse(content="Erro: Você não possui créditos de reposição.", status_code=400)
             
-            # Tenta criar no Google Calendar primeiro
+            g_id = None
             try:
                 titulo = f"Reposição: {aluno.nome}"
                 g_id = criar_evento(data_dt, data_fim_dt, titulo)
             except Exception as ge:
-                print(f"⚠️ Erro Google Calendar (Novo): {ge}")
+                print(f"⚠️ Erro Google Calendar: {ge}")
 
             nova_aula = models.Aula(
                 aluno_id=aluno.id,
@@ -180,7 +184,7 @@ async def reagendar_aula(
             aluno.creditos_reposicao -= 1
             db.add(nova_aula)
 
-        # --- CASO B: REAGENDAR EXISTENTE -
+        # --- CASO B: REAGENDAR EXISTENTE ---
         else:
             aula = db.query(models.Aula).filter(
                 models.Aula.id == aula_id, 
@@ -207,9 +211,11 @@ async def reagendar_aula(
             aula.lembrete_enviado = False
 
         db.commit()
+        # Em vez de RedirectResponse, retorne apenas os dados
         return RedirectResponse(url=f"/portal/{token}?sucesso=true", status_code=303)
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Erro: {e}")
-        return f"Erro ao processar: {e}"
+        print(f"❌ Erro no servidor: {e}")
+        # Retornar como HTMLResponse garante que o erro apareça de forma legível no navegador
+        return HTMLResponse(content=f"Erro ao processar agendamento: {str(e)}", status_code=500)

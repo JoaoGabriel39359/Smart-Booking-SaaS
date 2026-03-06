@@ -1,24 +1,23 @@
 from fastapi import APIRouter, HTTPException, Depends  
-from app.services.google_calendar import criar_evento as criar_evento_google
+from app import models
+from app.auth import verificar_token
+from app.services.google_calendar import criar_evento as criar_evento_google, remover_evento_google, criar_evento
+from app.services.gerar_agenda import gerar_aulas_da_semana
 from sqlalchemy.orm import Session                     
-from app.database import SessionLocal, get_db          
-from app.models import Turma, Aluno, Aula                   
-from .schemas import TurmaCreate 
+from app.database import get_db          
+from app.models import Turma, Aluno, Aula, HorarioAula                
 from datetime import date, datetime, timedelta
 import calendar
-import re
 
 router = APIRouter(prefix="/turmas", tags=["turmas"])
 
 # ==========================================================
 # FUNÇÃO AUXILIAR (A INCREMENTAÇÃO)
 # ==========================================================
-from app.services.google_calendar import criar_evento # Verifique se o import está assim
 
 def processar_geracao_aulas(db: Session, turma: Turma):
     """Gera aulas para os próximos 30 dias a partir de hoje"""
     hoje = date.today()
-    # Gerar para os próximos 30 dias para garantir que pegue a virada do mês
     fim_periodo = hoje + timedelta(days=30)
     
     dias_map = {
@@ -33,27 +32,21 @@ def processar_geracao_aulas(db: Session, turma: Turma):
     aulas_criadas = 0
     data_atual = hoje
 
-    # Loop dia após dia pelos próximos 30 dias
     while data_atual <= fim_periodo:
         if data_atual.weekday() == dia_alvo:
-            # Encontrou o dia da semana da turma!
             hora_aula = datetime.strptime(turma.horario, "%H:%M").time()
             data_inicio = datetime.combine(data_atual, hora_aula)
             data_fim = data_inicio + timedelta(hours=1)
 
-            # 1. CRIAR NO GOOGLE CALENDAR (Uma vez por horário)
             google_id = None
             try:
-                # O parâmetro no seu google_calendar.py é 'nome_aluno', mas aqui é uma turma
                 titulo_google = f"Turma {turma.tipo}: {turma.nome_turma}"
                 google_id = criar_evento(data_inicio, data_fim, titulo_google)
                 print(f"✅ Sincronizado no Google: {data_inicio}")
             except Exception as g_error:
                 print(f"❌ Erro Google Agenda: {g_error}")
 
-            # 2. VINCULAR ALUNOS NO BANCO
             for aluno in turma.alunos:
-                # Trava de duplicidade
                 existe = db.query(Aula).filter(
                     Aula.aluno_id == aluno.id, 
                     Aula.data_inicio == data_inicio
@@ -70,229 +63,128 @@ def processar_geracao_aulas(db: Session, turma: Turma):
                     )
                     db.add(nova_aula)
                     aulas_criadas += 1
-            
-            db.flush() # Salva temporariamente para o próximo loop ver
+            db.flush() 
             
         data_atual += timedelta(days=1)
-
     db.commit()
     return aulas_criadas
 
+# --- CRIAR TURMA ---
 @router.post("/")
-def criar_turma(dados: TurmaCreate):
-    db = SessionLocal()
+def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     try:
-        # 1. DEFINIR LIMITES
         limites = {"VIP": 1, "DUO": 2, "TEAM": 6}
-        limite_max = limites.get(dados.tipo, 6)
+        limite_max = limites.get(dados.get('tipo'), 6)
 
-        # 2. VERIFICAR QUANTIDADE DE ALUNOS ENVIADOS
-        if len(dados.aluno_ids) > limite_max:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Você tentou colocar {len(dados.aluno_ids)} alunos, mas o limite para {dados.tipo} é {limite_max}."
-            )
+        if len(dados.get('aluno_ids', [])) > limite_max:
+            raise HTTPException(status_code=400, detail="Limite de alunos excedido.")
 
-        # 3. CRIAÇÃO DA TURMA (Ajustado para os novos campos)
         nova_turma = Turma(
-            nome_turma=dados.nome_turma, # Verifique se no Models.py está exatamente assim
-            tipo=dados.tipo,
-            dia_semana=dados.dia_semana,  # Recebe do JavaScript
-            horario=dados.horario,        # Recebe do JavaScript
+            nome_turma=dados.get('nome_turma'),
+            tipo=dados.get('tipo'),
+            duracao_minutos=int(dados.get('duracao_minutos', 60)),
             capacidade_maxima=limite_max
         )
         db.add(nova_turma)
         db.flush() 
 
-        # 4. VINCULA OS ALUNOS
-        alunos = db.query(Aluno).filter(Aluno.id.in_(dados.aluno_ids)).all()
+        for h in dados.get('horarios', []):
+            novo_h = HorarioAula(
+                turma_id=nova_turma.id,
+                dia_da_semana=int(h['dia']),
+                horario=datetime.strptime(h['hora'], "%H:%M").time()
+            )
+            db.add(novo_h)
+
+        alunos = db.query(Aluno).filter(Aluno.id.in_(dados.get('aluno_ids', []))).all()
         for aluno in alunos:
             aluno.turma_id = nova_turma.id
-            aluno.tipo = dados.tipo # Atualiza o tipo do aluno para bater com a turma
+            aluno.tipo = dados.get('tipo')
 
         db.commit()
-
-        processar_geracao_aulas(db, nova_turma) 
+        gerar_aulas_da_semana(db) 
+        return {"msg": f"Turma {nova_turma.nome_turma} criada e aulas sincronizadas!"}
         
-        return {"msg": f"Turma {nova_turma.nome_turma} criada e aulas do mês geradas com sucesso!"}
-        
-    except HTTPException as http_e:
-        db.rollback()
-        raise http_e
     except Exception as e:
         db.rollback()
-        # Esse detalhe str(e) vai te mostrar no console se houver erro de nome de coluna
-        raise HTTPException(status_code=400, detail=f"Erro ao salvar no banco: {str(e)}")
-    finally:
-        db.close()
+        raise HTTPException(status_code=400, detail=str(e))
 
+# --- GERAR MENSAL (VERSÃO UNIFICADA) ---
 @router.post("/gerar-mensal")
-def rota_gerar_mensal(db: Session = Depends(get_db)):
-    """Rota manual caso queira forçar a atualização de todas as turmas"""
-    turmas = db.query(Turma).all()
-    total_geral = 0
-    for t in turmas:
-        total_geral += processar_geracao_aulas(db, t)
-    return {"msg": f"Total de {total_geral} aulas sincronizadas no sistema."}
+def rota_gerar_mensal(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+    try:
+        gerar_aulas_da_semana(db)
+        return {"msg": "Agenda do mês e Google Calendar sincronizados com sucesso!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao sincronizar: {str(e)}")
 
+# --- LISTAR TURMAS ---
 @router.get("/")
-def listar_turmas(db: Session = Depends(get_db)):
+def listar_turmas(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     turmas = db.query(Turma).all()
     resultado = []
-    
     for t in turmas:
         resultado.append({
             "id": t.id,
-            "nome_turma": t.nome_turma,  # <--- ALTERE DE t.nome PARA t.nome_turma
+            "nome_turma": t.nome_turma,
             "tipo": t.tipo,
             "dia_semana": t.dia_semana,
             "horario": t.horario,
             "capacidade_maxima": t.capacidade_maxima,
-            "alunos": [
-                {"id": a.id, "nome": a.nome, "sobrenome": a.sobrenome} 
-                for a in t.alunos
-            ]
+            "alunos": [{"id": a.id, "nome": a.nome, "sobrenome": a.sobrenome} for a in t.alunos]
         })
     return resultado
 
+# --- DELETAR TURMA ---
 @router.delete("/{turma_id}")
-def deletar_turma(turma_id: int):
-    db = SessionLocal()
+def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     try:
-        # 1. Busca a turma para ter certeza que existe
         turma = db.query(Turma).filter(Turma.id == turma_id).first()
         if not turma:
             raise HTTPException(status_code=404, detail="Turma não encontrada")
-        
-        # 2. LIMPEZA DOS ALUNOS: Desvincula os alunos (seta turma_id como null)
-        # Isso evita que o aluno seja deletado, apenas "tira ele da sala"
-        db.query(Aluno).filter(Aluno.turma_id == turma_id).update({"turma_id": None})
-        
-        # 3. LIMPEZA DAS AULAS: Deleta todas as aulas associadas a essa turma
-        # Isso resolve o erro "ForeignKeyViolation" que travou seu código
-        db.query(Aula).filter(Aula.turma_id == turma_id).delete()
-        
-        # 4. DELETAR A TURMA: Agora que não há mais aulas ligadas a ela, podemos apagar
+
+        aulas_com_google = db.query(models.HistoricoAula.google_event_id).filter(
+            models.HistoricoAula.aluno.has(turma_id=turma_id),
+            models.HistoricoAula.google_event_id != None
+        ).distinct().all()
+
+        for (g_id,) in aulas_com_google:
+            try:
+                remover_evento_google(g_id)
+            except:
+                pass
+
+        db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).update({"turma_id": None})
+        db.query(models.HistoricoAula).filter(models.HistoricoAula.aluno.has(turma_id=turma_id)).delete(synchronize_session=False)
+
         db.delete(turma)
-        
         db.commit()
-        return {"msg": "Turma e aulas deletadas com sucesso. Alunos permanecem no banco (sem turma)."}
-        
+        return {"msg": "Turma e agenda do Google limpas com sucesso!"}
     except Exception as e:
         db.rollback()
-        print(f"Erro ao deletar turma: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
-    finally:
-        db.close()
+        raise HTTPException(status_code=500, detail=str(e))
 
+# --- ADICIONAR ALUNO ---
 @router.post("/{turma_id}/adicionar-aluno/{aluno_id}")
-def adicionar_aluno_turma(turma_id: int, aluno_id: int, db: Session = Depends(get_db)):
-    # Remova o "models." e use apenas Turma e Aluno
+def adicionar_aluno_turma(turma_id: int, aluno_id: int, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     turma = db.query(Turma).filter(Turma.id == turma_id).first()
     aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
-
     if not turma or not aluno:
-        raise HTTPException(status_code=404, detail="Turma ou Aluno não encontrado")
-
-    # Regra de Limite
-    limites = {"VIP": 1, "DUO": 2, "TEAM": 6}
-    total_atual = len(turma.alunos)
-
-    # Pegamos o limite com base no tipo, padrão é 1 se não encontrar
-    limite_permitido = limites.get(turma.tipo, 1)
-
-    if total_atual >= limite_permitido:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Limite de {turma.tipo} atingido ({limite_permitido} alunos)."
-        )
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    
+    if len(turma.alunos) >= ({"VIP": 1, "DUO": 2, "TEAM": 6}.get(turma.tipo, 1)):
+        raise HTTPException(status_code=400, detail="Limite atingido.")
 
     aluno.turma_id = turma_id
-    # Opcional: garantir que o tipo do aluno acompanhe o da turma
-    #aluno.tipo = turma.tipo 
-    
     db.commit()
-    return {"msg": f"{aluno.nome} adicionado à turma {turma.nome_turma} com sucesso!"}
+    return {"msg": f"{aluno.nome} adicionado!"}
 
+# --- REMOVER ALUNO ---
 @router.post("/{turma_id}/remover-aluno/{aluno_id}")
-def remover_aluno_turma(turma_id: int, aluno_id: int, db: Session = Depends(get_db)):
-    # Procuramos o aluno que pertence a essa turma específica
+def remover_aluno_turma(turma_id: int, aluno_id: int, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     aluno = db.query(Aluno).filter(Aluno.id == aluno_id, Aluno.turma_id == turma_id).first()
-
     if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado nesta turma.")
-
-    # Removemos o vínculo
+        raise HTTPException(status_code=404)
     aluno.turma_id = None
-    # Opcional: Se quiseres que ele volte a ser "VIP" por padrão ao sair de uma turma
-    # aluno.tipo = "VIP" 
-
     db.commit()
-    return {"msg": f"{aluno.nome} removido da turma com sucesso!"}
-
-@router.post("/gerar-mensal")
-def gerar_aulas_mes():
-    db = SessionLocal()
-    try:
-        hoje = date.today()
-        ano, mes = hoje.year, hoje.month
-        turmas = db.query(Turma).all()
-        aulas_criadas = 0
-        dias_map = {"Segunda": 0, "Terça": 1, "Quarta": 2, "Quinta": 3, "Sexta": 4, "Sábado": 5, "Domingo": 6}
-
-        for turma in turmas:
-            dia_alvo = dias_map.get(turma.dia_semana)
-            if dia_alvo is None: continue
-
-            cal = calendar.Calendar(firstweekday=0)
-            for dia in cal.itermonthdates(ano, mes):
-                if dia.weekday() == dia_alvo and dia.month == mes and dia >= hoje:
-                    
-                    hora_aula = datetime.strptime(turma.horario, "%H:%M").time()
-                    data_inicio = datetime.combine(dia, hora_aula)
-                    data_fim = data_inicio + timedelta(hours=1)
-
-                    # --- PASSO 1: GERAR O ID ÚNICO ---
-                    # Esta variável DEVE ser preenchida apenas UMA VEZ por horário
-                    ID_UNICO_PARA_ESTE_HORARIO = None
-                    
-                    try:
-                        nome_evento = f"{turma.tipo}: {turma.nome_turma}"
-                        # CHAMADA AO GOOGLE
-                        ID_UNICO_PARA_ESTE_HORARIO = criar_evento_google(data_inicio, data_fim, nome_evento)
-                        print(f"\n[Sincronizador] Criado no Google ID: {ID_UNICO_PARA_ESTE_HORARIO} para a data {dia}")
-                    except Exception as g_error:
-                        print(f"[Erro Google]: {g_error}")
-
-                    # --- PASSO 2: DISTRIBUIR O MESMO ID PARA TODOS OS ALUNOS ---
-                    for aluno in turma.alunos:
-                        print(f"[Sincronizador] Vinculando Aluno {aluno.nome} ao ID: {ID_UNICO_PARA_ESTE_HORARIO}")
-                        
-                        existe = db.query(Aula).filter(
-                            Aula.aluno_id == aluno.id, 
-                            Aula.data_inicio == data_inicio
-                        ).first()
-                        
-                        if not existe:
-                            nova_aula = Aula(
-                                aluno_id=aluno.id,
-                                turma_id=turma.id,
-                                data_inicio=data_inicio,
-                                data_fim=data_fim,
-                                status="marcada",
-                                tipo=turma.tipo,
-                                google_event_id=ID_UNICO_PARA_ESTE_HORARIO # <--- GARANTINDO O MESMO ID
-                            )
-                            db.add(nova_aula)
-                            aulas_criadas += 1
-                    
-                    db.flush()
-
-        db.commit()
-        return {"msg": f"Sucesso! {aulas_criadas} aulas geradas."}
-    except Exception as e:
-        db.rollback()
-        print(f"ERRO: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+    return {"msg": "Removido!"}

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum, Time
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
@@ -36,6 +36,9 @@ class Aluno(Base):
     turma_id = Column(Integer, ForeignKey("turmas.id"), nullable=True)
     turma = relationship("Turma", back_populates="alunos")
     aulas = relationship("Aula", back_populates="aluno")
+
+    horarios = relationship("HorarioAula", back_populates="aluno")
+    historico = relationship("HistoricoAula", back_populates="aluno")
 
 class Aula(Base):
     __tablename__ = "aulas"
@@ -74,9 +77,11 @@ class Turma(Base):
     # Opcional: Você pode manter capacidade_maxima, 
     # mas o tipo (VIP/DUO) já dita isso na sua lógica JS
     capacidade_maxima = Column(Integer, default=6)
+    duracao_minutos = Column(Integer, default=60)
 
     # Relacionamento
     alunos = relationship("Aluno", back_populates="turma")
+    horarios = relationship("HorarioAula", back_populates="turma")
 
 class GradeProfessor(Base):
     __tablename__ = "grade_professor"
@@ -92,4 +97,29 @@ class Conversa(Base):
     telefone = Column(String, unique=True, index=True)
     etapa = Column(String, default="menu")
     data_escolhida = Column(String, nullable=True)
+
+# Modelo para os horários semanais (Múltiplas aulas)
+class HorarioAula(Base): # <--- Use Base aqui
+    __tablename__ = 'horarios_aula'
+    id = Column(Integer, primary_key=True)
+    aluno_id = Column(Integer, ForeignKey('alunos.id'))
+    turma_id = Column(Integer, ForeignKey('turmas.id'))
+    dia_da_semana = Column(Integer)  
+    horario = Column(Time, nullable=False) 
+
+    aluno = relationship("Aluno", back_populates="horarios")
+    turma = relationship("Turma", back_populates="horarios")
+
+# Modelo para o Histórico/Presença
+class HistoricoAula(Base): # <--- Use Base aqui
+    __tablename__ = 'historico_aulas'
+    id = Column(Integer, primary_key=True)
+    aluno_id = Column(Integer, ForeignKey('alunos.id'))
+    data_aula = Column(DateTime, nullable=False)
+    status_presenca = Column(Boolean, default=False)
+    observacao = Column(String)
+    desempenho = Column(String)
+    google_event_id = Column(String, nullable=True)
+
+    aluno = relationship("Aluno", back_populates="historico")
 
