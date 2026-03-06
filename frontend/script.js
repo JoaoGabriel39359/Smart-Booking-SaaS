@@ -1,6 +1,6 @@
 const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
     ? 'http://127.0.0.1:8000' 
-    : 'https://seu-backend-no-render.onrender.com';
+    : window.location.origin;
 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
 const diasNome = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 
@@ -28,23 +28,28 @@ function trocarAba(aba) {
 async function fetchProtegido(url, opcoes = {}) {
     const token = localStorage.getItem('token_professor');
     
-    // Adiciona o cabeçalho de autorização automaticamente
     const cabecalhos = {
         ...opcoes.headers,
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
     };
 
-    const resposta = await fetch(url, { ...opcoes, headers: cabecalhos });
+    try {
+        const resposta = await fetch(url, { ...opcoes, headers: cabecalhos });
 
-    // Se o servidor responder 401 (Token expirado ou inválido), desloga
-    if (resposta.status === 401) {
-        localStorage.removeItem('token_professor');
-        window.location.href = "/frontend/login.html";
-        return;
+        // Se o token morreu (401), limpa e manda pro login
+        if (resposta.status === 401) {
+            localStorage.removeItem('token_professor');
+            window.location.href = "/frontend/login.html";
+            return { json: () => [] }; // Devolve uma "falsa lista" vazia pra não quebrar o forEach
+        }
+
+        if (!resposta.ok) return { json: () => [] };
+
+        return resposta;
+    } catch (error) {
+        return { json: () => [] }; // Se a internet cair, também não quebra o JS
     }
-
-    return resposta;
 }
 
 // --- GESTÃO DE ALUNOS (COM NOVOS CAMPOS E CORREÇÃO 422) ---
@@ -478,6 +483,10 @@ async function carregarAgenda() {
     try {
         const res = await fetchProtegido(`${API_URL}/aulas/lista-professor`);
         const aulas = await res.json();
+        if (!Array.isArray(aulas)) {
+            console.error("O servidor não retornou uma lista. Verifique o login.");
+            return; // Para aqui e não tenta dar o forEach
+        }
         
         container.innerHTML = aulas.length ? '' : '<p class="col-span-full text-slate-400 py-10 text-center">Nenhuma aula agendada.</p>';
         
