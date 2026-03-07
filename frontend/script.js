@@ -1412,3 +1412,10 @@ window.onload = () => {
     }
     // 3. Se estiver na página de login, o código acima é ignorado e não gera erro 401
 };
+
+// Lembrete da função de Logout para o seu script.js
+function fazerLogout() {
+    localStorage.removeItem('token_professor');
+    sessionStorage.clear();
+    window.location.href = "/frontend/login.html";
+}
