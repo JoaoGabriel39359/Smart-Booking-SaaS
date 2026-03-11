@@ -33,7 +33,7 @@ def rodar_cron_completo():
     hoje = agora.date() # <-- ADICIONEI ESSA LINHA (estava faltando o 'hoje')
     
     # URL BASE
-    base_url = "https://pseudoheroic-semispontaneous-gerda.ngrok-free.dev"
+    base_url = "https://smart-booking-saas.onrender.com"
 
     print(f"--- Iniciando Cron Job: {agora.strftime('%d/%m/%Y %H:%M:%S')} ---")
 
@@ -77,7 +77,11 @@ def rodar_cron_completo():
     
     print(f"DEBUG: Buscando aulas na janela de teste: {janela_inicio.strftime('%H:%M')} até {janela_fim.strftime('%H:%M')}")
 
-    aulas_do_dia = db.query(Aula).filter(cast(Aula.data_inicio, Date) == hoje).all()
+    aulas_do_dia = db.query(Aula).filter(
+        cast(Aula.data_inicio, Date) == hoje,
+        Aula.lembrete_enviado == False,    
+        Aula.status == 'marcada'           
+    ).all()
 
     for a in aulas_do_dia:
         status_str = a.status.value if hasattr(a.status, 'value') else str(a.status)

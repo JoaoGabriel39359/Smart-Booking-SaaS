@@ -18,8 +18,8 @@ def enviar_lembretes_20min():
     proximas_aulas = db.query(Aula).filter(
         Aula.data_inicio >= janela_inicio,
         Aula.data_inicio <= janela_fim,
-        Aula.status == 'marcada',
-        Aula.lembrete_enviado == False
+        Aula.status == 'marcada',          
+        Aula.lembrete_enviado == False     
     ).all()
 
     if not proximas_aulas:

@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from app.database import get_db  # Importamos apenas o necessário
 from app.auth import verificar_token
 from sqlalchemy.orm import Session
-from app.models import Aluno, HistoricoAula, Turma
+from app.models import Aluno, Aula, HistoricoAula, Turma
 from .schemas import AlunoCreate, AlunoEdit
 import re
 
@@ -164,15 +164,40 @@ def portal_do_aluno(aluno_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{aluno_id}/relatorio")
 def obter_relatorio_aluno(aluno_id: int, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+    # 1. Busca dados da tabela HistoricoAula onde a chamada já foi concluída
     historico = db.query(HistoricoAula).filter(
-        HistoricoAula.aluno_id == aluno_id
+        HistoricoAula.aluno_id == aluno_id,
+        HistoricoAula.chamada_realizada == True # Só o que foi finalizado aparece aqui
     ).order_by(HistoricoAula.data_aula.desc()).all()
     
-    return [
-        {{
-            "data": h.data_aula.strftime("%d/%m/%Y"),
-            "presenca": "✅" if h.status_presenca else "❌",
+    # 2. Busca dados da tabela Aula (Backup para casos onde o status mudou mas o histórico falhou)
+    aulas_passadas = db.query(Aula).filter(
+        Aula.aluno_id == aluno_id,
+        Aula.status.in_(["Presente", "Ausente"]) # Use os valores do seu Enum StatusAula
+    ).order_by(Aula.data_inicio.desc()).all()
+
+    relatorio_final = []
+
+    # Processamento do Histórico Pedagógico
+    for h in historico:
+        relatorio_final.append({
+            "data": h.data_aula.strftime("%d/%m/%Y") if h.data_aula else "Data N/A",
+            "presenca": "✅ Presente" if h.status_presenca else "❌ Falta",
             "desempenho": h.desempenho or "Sem avaliação",
             "observacao": h.observacao or "-"
-        }} for h in historico
-    ]
+        })
+
+    # Evita duplicidade se a aula estiver nas duas tabelas
+    datas_no_relatorio = {r["data"] for r in relatorio_final}
+
+    for a in aulas_passadas:
+        data_str = a.data_inicio.strftime("%d/%m/%Y")
+        if data_str not in datas_no_relatorio:
+            relatorio_final.append({
+                "data": data_str,
+                "presenca": "✅ Presente" if a.status.value == "Presente" else "❌ Falta",
+                "desempenho": "Aguardando avaliação",
+                "observacao": "-"
+            })
+
+    return relatorio_final

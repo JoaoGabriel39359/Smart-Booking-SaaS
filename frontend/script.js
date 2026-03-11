@@ -6,6 +6,7 @@ const diasNome = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "
 
 let dataAtualCalendario = new Date();
 let listaGlobalAlunos = [];
+let modoExibirFinalizadas = false;
 
 // --- NAVEGAÇÃO ENTRE ABAS ---
 function trocarAba(aba) {
@@ -1261,6 +1262,24 @@ async function carregarEstatisticas() {
     }
 }
 
+function alternarModoHistorico() {
+    modoExibirFinalizadas = !modoExibirFinalizadas;
+    const btn = document.getElementById('btnAlternarHistorico');
+
+    if (modoExibirFinalizadas) {
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> Esconder Finalizadas';
+        btn.classList.replace('bg-slate-200', 'bg-indigo-600');
+        btn.classList.replace('text-slate-600', 'text-white');
+    } else {
+        btn.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> Ver Finalizadas';
+        btn.classList.replace('bg-indigo-600', 'bg-slate-200');
+        btn.classList.replace('text-white', 'text-slate-600');
+    }
+
+    carregarHistoricoGeral(); 
+}
+
+// Sua função principal atualizada
 async function carregarHistoricoGeral() {
     const container = document.getElementById('listaHistoricoGeral');
     if (!container) return;
@@ -1268,9 +1287,12 @@ async function carregarHistoricoGeral() {
     container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-slate-400">Carregando...</td></tr>';
     
     try {
-        carregarEstatisticas();
+        // AJUSTE: Construção dinâmica da URL com o parâmetro de finalizadas
+        const urlFinal = modoExibirFinalizadas 
+            ? `${API_URL}/aulas/admin/historico-geral?finalizadas=true` 
+            : `${API_URL}/aulas/admin/historico-geral`;
 
-        const res = await fetchProtegido(`${API_URL}/aulas/admin/historico-geral`);
+        const res = await fetchProtegido(urlFinal);
         const sessoes = await res.json();
         
         container.innerHTML = "";
@@ -1279,15 +1301,17 @@ async function carregarHistoricoGeral() {
             return;
         }
 
-        sessoes.forEach((sessao, index) => {
+        sessoes.forEach((sessao) => {
             const dataFmt = new Date(sessao.data).toLocaleDateString('pt-BR');
             const totalAlunos = sessao.alunos.length;
             
-            // Transformamos a lista de alunos em texto seguro para passar pro botão
+            // Lógica profissional: Verifica se todos os alunos daquela linha já tiveram a chamada feita
+            const todosFinalizados = sessao.alunos.every(a => a.chamada_realizada === true);
+
             const alunosJSON = JSON.stringify(sessao.alunos).replace(/"/g, '&quot;');
 
             container.innerHTML += `
-                <tr class="border-b hover:bg-slate-50 transition">
+                <tr class="border-b hover:bg-slate-50 transition ${todosFinalizados ? 'opacity-50' : ''}">
                     <td class="p-4 font-bold text-slate-700">${dataFmt}</td>
                     <td class="p-4">
                         <div class="flex flex-col">
@@ -1296,14 +1320,15 @@ async function carregarHistoricoGeral() {
                         </div>
                     </td>
                     <td class="p-4 text-center">
-                        <span class="px-2 py-1 rounded-md bg-slate-100 text-slate-500 font-black text-[10px]">
-                            ${totalAlunos} ALUNO(S)
+                        <span class="px-2 py-1 rounded-md ${todosFinalizados ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'} font-black text-[10px]">
+                            ${todosFinalizados ? '✅ CONCLUÍDO' : `${totalAlunos} ALUNO(S)`}
                         </span>
                     </td>
                     <td class="p-4 text-center">
                         <button onclick="abrirChamadaRetroativaGrupo('${sessao.nome_exibicao}', '${alunosJSON}')" 
-                            class="bg-indigo-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition flex items-center gap-2 mx-auto shadow-lg shadow-indigo-100">
-                            <i class="fa-solid fa-clipboard-user"></i> Ver Chamada
+                            class="${todosFinalizados ? 'bg-slate-500' : 'bg-indigo-600'} text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:opacity-80 transition flex items-center gap-2 mx-auto shadow-lg shadow-indigo-100">
+                            <i class="fa-solid ${todosFinalizados ? 'fa-pen-to-square' : 'fa-clipboard-user'}"></i> 
+                            ${todosFinalizados ? 'Corrigir' : 'Ver Chamada'}
                         </button>
                     </td>
                 </tr>
@@ -1311,7 +1336,7 @@ async function carregarHistoricoGeral() {
         });
     } catch (e) {
         console.error(e);
-        container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-red-400">Erro ao processar histórico.</td></tr>';
+        container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-red-400">Erro ao carregar dados.</td></tr>';
     }
 }
 

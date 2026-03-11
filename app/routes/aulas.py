@@ -8,7 +8,7 @@ from app.services.whatsapp import enviar_whatsapp
 from app.database import get_db # Removido SessionLocal daqui
 from app.services.google_calendar import criar_evento, remover_evento_google
 from app import models
-from app.models import Aluno, Aula, GradeProfessor, HorarioAula, HistoricoAula   
+from app.models import Aluno, Aula, GradeProfessor, HorarioAula, HistoricoAula, StatusAula 
 from datetime import datetime, timedelta, time
 
 TELEFONE_PROFESSOR = "5524998739359"
@@ -319,25 +319,116 @@ def listar_aulas_professor(db: Session = Depends(get_db), usuario: str = Depends
     return list(agrupado.values())
 
 @router.patch("/{aula_id}/presenca")
-def marcar_presenca(aula_id: int, status: str = FastAPIQuery(...), desempenho: str = FastAPIQuery(...), observacoes: str = FastAPIQuery(""), db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
-    aula = db.query(HistoricoAula).filter(HistoricoAula.id == aula_id).first()
-    if not aula: raise HTTPException(status_code=404)
-    aula.status_presenca = (status.lower() == 'presente')
-    aula.desempenho = desempenho
-    aula.observacao = observacoes
-    db.commit()
-    return {"msg": "Presença registrada"}
+def marcar_presenca_agenda(
+    aula_id: int, 
+    status: str = FastAPIQuery(...), 
+    desempenho: str = FastAPIQuery(...), 
+    observacao: str = FastAPIQuery(""), 
+    db: Session = Depends(get_db), 
+    usuario: str = Depends(verificar_token)
+):
+    # 1. Busca a aula na tabela de Agenda (aulas)
+    # Importante: No seu painel, o ID enviado pode ser o da Aula ou do Histórico.
+    # Vamos tratar o caso da Aula primeiro.
+    aula = db.query(Aula).filter(Aula.id == aula_id).first()
+    
+    if not aula:
+        # Se não achou na agenda, talvez o front já enviou o ID do histórico
+        return marcar_presenca(aula_id, status, desempenho, observacao, db, usuario)
 
+    # 2. Define o booleano de presença
+    is_presente = (status.strip().lower() == 'presente')
+
+    # 3. Atualiza o status na tabela de Agenda (Enum StatusAula)
+    aula.status = StatusAula.presente if is_presente else StatusAula.ausente
+
+    # 4. SINCRONIZAÇÃO: Busca ou Cria o registro no Histórico
+    # Procuramos um histórico para este aluno na mesma data desta aula
+    aula_hist = db.query(HistoricoAula).filter(
+        HistoricoAula.aluno_id == aula.aluno_id,
+        func.date(HistoricoAula.data_aula) == func.date(aula.data_inicio)
+    ).first()
+
+    if not aula_hist:
+        # Se não existe histórico (aula avulsa antiga), criamos um profissional agora
+        aula_hist = HistoricoAula(
+            aluno_id=aula.aluno_id,
+            data_aula=aula.data_inicio,
+            google_event_id=aula.google_event_id
+        )
+        db.add(aula_hist)
+    
+    # 5. Preenche os dados pedagógicos e fecha a chamada
+    aula_hist.status_presenca = is_presente
+    aula_hist.desempenho = desempenho
+    aula_hist.observacao = observacao
+    aula_hist.chamada_realizada = True  # <--- Isso faz ela sumir da lista de pendentes
+
+    db.commit()
+    return {"msg": "Presença registrada na agenda e histórico atualizado"}
+
+# Note que mudei o caminho da rota para bater com o que o seu terminal mostrou (404)
+@router.patch("/admin/presenca-retroativa/{aula_id}")
+def marcar_presenca(
+    aula_id: int, 
+    status: str = FastAPIQuery(...), 
+    desempenho: str = FastAPIQuery(...), 
+    observacao: str = FastAPIQuery(""), 
+    db: Session = Depends(get_db), 
+    usuario: str = Depends(verificar_token)
+):
+    aula_hist = db.query(HistoricoAula).filter(HistoricoAula.id == aula_id).first()
+    if not aula_hist: 
+        raise HTTPException(status_code=404)
+
+    # LÓGICA BLINDADA: 
+    # Somente se a string for exatamente 'presente' (ignora maiúsculas/minúsculas)
+    is_presente = (status.strip().lower() == 'presente')
+    
+    aula_hist.status_presenca = is_presente
+    aula_hist.desempenho = desempenho
+    aula_hist.observacao = observacao
+    aula_hist.chamada_realizada = True  # <--- CRUCIAL para sumir da lista
+
+    # Sincroniza com a tabela 'aulas' (Agenda)
+    aula_agenda = db.query(Aula).filter(
+        Aula.aluno_id == aula_hist.aluno_id,
+        func.date(Aula.data_inicio) == func.date(aula_hist.data_aula)
+    ).first()
+
+    if aula_agenda:
+        # Usa o Enum StatusAula que definimos no models.py
+        aula_agenda.status = StatusAula.presente if is_presente else StatusAula.ausente
+
+    db.commit()
+    return {"msg": "Registro atualizado", "status_salvo": "Presente" if is_presente else "Ausente"}
+    
 @router.get("/admin/historico-geral")
-def listar_historico_geral(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def listar_historico_geral(
+    finalizadas: bool = False, 
+    db: Session = Depends(get_db), 
+    usuario: str = Depends(verificar_token)
+):
     agora = datetime.now()
-    registros = db.query(HistoricoAula).filter(HistoricoAula.data_aula <= agora).order_by(HistoricoAula.data_aula.desc()).all()
+    
+    query = db.query(HistoricoAula).filter(HistoricoAula.data_aula <= agora)
+    
+    if not finalizadas:
+        query = query.filter(HistoricoAula.chamada_realizada == False)
+    
+    registros = query.order_by(HistoricoAula.data_aula.desc()).all()
+    
+    registros = query.order_by(HistoricoAula.data_aula.desc()).all()
+    
     agrupado = {}
     for reg in registros:
         aluno = db.query(Aluno).filter(Aluno.id == reg.aluno_id).first()
-        if not aluno: continue
+        if not aluno: 
+            continue
+            
         data_formatada = reg.data_aula.date() if hasattr(reg.data_aula, 'date') else reg.data_aula
         chave = f"{data_formatada}_{aluno.turma_id if aluno.turma_id else f'vip_{aluno.id}'}"
+        
         if chave not in agrupado:
             agrupado[chave] = {
                 "data": reg.data_aula.isoformat() if hasattr(reg.data_aula, 'isoformat') else str(reg.data_aula),
@@ -345,7 +436,15 @@ def listar_historico_geral(db: Session = Depends(get_db), usuario: str = Depends
                 "is_turma": bool(aluno.turma_id),
                 "alunos": []
             }
-        agrupado[chave]["alunos"].append({"historico_id": reg.id, "nome": f"{aluno.nome} {aluno.sobrenome or ''}", "status_presenca": reg.status_presenca, "desempenho": reg.desempenho, "observacao": reg.observacao})
+        
+        agrupado[chave]["alunos"].append({
+            "historico_id": reg.id, 
+            "nome": f"{aluno.nome} {aluno.sobrenome or ''}", 
+            "status_presenca": reg.status_presenca, 
+            "desempenho": reg.desempenho, 
+            "observacao": reg.observacao
+        })
+    
     return list(agrupado.values())
 
 @router.get("/admin/estatisticas-mes")
@@ -396,4 +495,4 @@ def obter_historico_aluno(aluno_id: int, db: Session = Depends(get_db)):
 @router.get("/relatorio-aluno/{aluno_id}")
 def obter_relatorio_pedagogico(aluno_id: int, db: Session = Depends(get_db)):
     historico = db.query(HistoricoAula).filter(HistoricoAula.aluno_id == aluno_id).order_by(HistoricoAula.data_aula.desc()).all()
-    return [{"data": h.data_aula.strftime("%d/%m/%Y") if hasattr(h.data_aula, 'strftime') else str(h.data_aula), "presenca": "✅" if h.status_presenca else "❌", "desempenho": h.desempenho or "Sem avaliação", "observacao": h.observacao or "-"} for h in historico]
+    return [{"data": h.data_aula.strftime("%d/%m/%Y") if hasattr(h.data_aula, 'strftime') else str(h.data_aula), "presenca": "✅" if h.status_presenca is True else "❌", "desempenho": h.desempenho or "Sem avaliação", "observacao": h.observacao or "-"} for h in historico]

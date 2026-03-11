@@ -8,38 +8,27 @@ EVO_KEY = os.getenv("EVOLUTION_API_KEY")
 EVO_INSTANCE = os.getenv("EVOLUTION_INSTANCE")
 
 def enviar_whatsapp(numero: str, mensagem: str):
-    """
-    Envia uma mensagem via Evolution API hospedada na VPS.
-    """
-    # 1. Remove espaços, parênteses e traços, mas MANTÉM o "+" se existir
-    # Exemplo: "+1 (555) 123-4567" -> "+15551234567"
-    numero_limpo = "".join(filter(lambda x: x.isdigit() or x == "+", numero))
+    # 1. Limpa TUDO o que não for número
+    numero_limpo = "".join(filter(str.isdigit, numero))
 
-    # 2. Lógica de Prefixo Internacional
-    if not numero_limpo.startswith("+"):
-        # Se não tem o "+", verificamos se o usuário já digitou o 55
-        if not numero_limpo.startswith("55") and len(numero_limpo) <= 11:
-            # Se tem 11 dígitos ou menos e não começa com 55, assumimos Brasil
+    # 2. Garante o prefixo 55 se for Brasil (números de 10 ou 11 dígitos)
+    if len(numero_limpo) <= 11:
+        if not numero_limpo.startswith("55"):
             numero_limpo = f"55{numero_limpo}"
-    else:
-        # Se já tem o "+", removemos apenas o símbolo para a Evolution API processar
-        numero_limpo = numero_limpo.replace("+", "")
-
-    # 2. Montagem da URL da sua VPS
+    
+    # A URL deve ser EXATAMENTE essa para a v1.8.3
     url = f"{EVO_URL}/message/sendText/{EVO_INSTANCE}"
 
-    # 3. Cabeçalhos de segurança
     headers = {
         "Content-Type": "application/json",
-        "apikey": EVO_KEY
+        "apikey": EVO_KEY # Aqui vai o 8899jgvb que está no seu Render
     }
 
-    # 4. Corpo da mensagem (O que a Evolution espera)
     payload = {
-        "number": numero_limpo,
+        "number": numero_limpo, # A Evolution v1 cuida do @s.whatsapp.net sozinha
         "options": {
-            "delay": 1200, # Pequeno delay de 1.2s para parecer humano
-            "presence": "composing" # Mostra "digitando..." no zap do aluno
+            "delay": 1200,
+            "presence": "composing"
         },
         "textMessage": {
             "text": mensagem

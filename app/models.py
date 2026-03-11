@@ -120,6 +120,7 @@ class HistoricoAula(Base): # <--- Use Base aqui
     observacao = Column(String)
     desempenho = Column(String)
     google_event_id = Column(String, nullable=True)
+    chamada_realizada = Column(Boolean, default=False)
 
     aluno = relationship("Aluno", back_populates="historico")
 
