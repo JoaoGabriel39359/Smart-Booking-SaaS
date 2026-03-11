@@ -257,9 +257,17 @@ def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)):
 
     db.commit()
 
+    link_portal = f"https://smart-booking-saas.onrender.com/portal/{aluno.token_acesso}"
+
     msg = f"Olá {aluno.nome}! ⚠️\nSua aula de *{aula.data_inicio.strftime('%d/%m às %H:%M')}* foi cancelada."
+    
     if gera_reposicao:
-        msg += f"\n✅ *Reposição gerada.* Válida até: *{validade_formatada}*."
+        msg += (
+            f"\n✅ *Reposição gerada.*\n"
+            f"📅 Válida até: *{validade_formatada}*.\n\n"
+            f"Você já pode reagendar sua aula através do seu portal:\n"
+            f"{link_portal}"
+        )
     else:
         msg += "\n❌ Sem direito a reposição (cancelamento tardio)."
     
@@ -267,8 +275,6 @@ def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)):
         enviar_whatsapp(aluno.telefone, msg)
     except:
         pass
-
-    return {"msg": "Sucesso", "reembolso": gera_reposicao, "novo_status": novo_status, "validade": validade_formatada}
 
 # ==============================
 # GRADE E HISTÓRICO (ADMIN)

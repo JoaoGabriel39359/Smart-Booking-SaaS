@@ -110,7 +110,7 @@ async def painel():
 # NOVO PORTAL DO ALUNO (Unificado: Ver, Cancelar e Agendar)
 @app.get("/portal/{token}", response_class=HTMLResponse)
 async def pagina_portal_aluno(token: str, request: Request, db: Session = Depends(get_db)):
-    # 1. Ajuste de Fuso Horário
+    # Mantemos o fuso horário de Brasília para garantir que as aulas apareçam
     fuso_br = pytz.timezone('America/Sao_Paulo')
     agora_br = datetime.now(fuso_br).replace(tzinfo=None)
 
@@ -119,25 +119,14 @@ async def pagina_portal_aluno(token: str, request: Request, db: Session = Depend
     if not aluno:
         return HTMLResponse(content="Link de acesso inválido ou expirado.", status_code=404)
 
-    # 2. LOG DE DEBUG (Isso vai aparecer no seu painel do Render)
-    # Vamos dar uma margem de 6 horas para garantir que apareça QUALQUER aula de hoje
+    # Mantemos a margem de segurança de 6 horas para as aulas de hoje não sumirem
     filtro_hora = agora_br - timedelta(hours=6)
-    print(f"--- DEBUG PORTAL ---")
-    print(f"Agora no Brasil: {agora_br}")
-    print(f"Buscando aulas após: {filtro_hora}")
 
-    # 3. Busca das aulas
     aulas_aluno = db.query(models.Aula).filter(
         models.Aula.aluno_id == aluno.id,
         models.Aula.status == "marcada",
         models.Aula.data_inicio >= filtro_hora
     ).order_by(models.Aula.data_inicio).all()
-
-    # Log para ver se o banco retornou algo
-    print(f"Aulas encontradas no banco: {len(aulas_aluno)}")
-    for a in aulas_aluno:
-        print(f"ID: {a.id} | Data: {a.data_inicio} | Status: {a.status}")
-    print(f"--------------------")
 
     contexto_aluno = {
         "id": aluno.id,
