@@ -28,7 +28,11 @@ def verificar_lembretes(db: Session):
             nome_aluno = aula.aluno.nome if aula.aluno else "Aluno"
             horario = aula.data_inicio.strftime('%H:%M')
             
-            msg = f"Ei {nome_aluno}! 👋\n\nSua aula começa em *20 minutos* ({horario}). Já está pronto(a)?"
+            msg = (
+                    f"Ei {nome_aluno}! 👋\n\n"
+                    f"Passando para avisar que sua aula começa em *20 minutos* ({horario}).\n"
+                    f"Já está pronto(a)?"
+                )
             
             sucesso = enviar_whatsapp(aula.aluno.telefone, msg)
             
@@ -51,11 +55,26 @@ def rota_verificar_lembretes(db: Session = Depends(get_db)):
 
 # --- 3. FUNÇÃO PARA O SCHEDULER (O VIGIA AUTOMÁTICO) ---
 def verificar_lembretes_background():
-    """
-    Esta função abre o banco sozinha para o agendador não travar.
-    """
     db = SessionLocal()
     try:
-        verificar_lembretes(db)
+        agora = datetime.now()
+        # Procura aulas em exatas 10 horas
+        check_10h = agora + timedelta(hours=10)
+        
+        aulas_10h = db.query(Aula).filter(
+            Aula.data_inicio >= check_10h,
+            Aula.data_inicio <= check_10h + timedelta(minutes=1),
+            Aula.status == "marcada"
+        ).all()
+
+        for aula in aulas_10h:
+            aluno = aula.aluno
+            if aluno.tipo == "VIP":
+                msg = (
+                    f"Olá {aluno.nome}, passando para confirmar sua aula em 10 horas! 🎓\n"
+                    f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
+                    f"Lembrando: você pode reagendar pelo portal com até 3h de antecedência."
+                )
+                enviar_whatsapp(aluno.telefone, msg)
     finally:
         db.close()

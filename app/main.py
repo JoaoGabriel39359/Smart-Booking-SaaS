@@ -1,6 +1,8 @@
 import os
+import pytz
 from dotenv import load_dotenv
 load_dotenv()
+from app.services.whatsapp import enviar_whatsapp
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
@@ -108,17 +110,22 @@ async def painel():
 # NOVO PORTAL DO ALUNO (Unificado: Ver, Cancelar e Agendar)
 @app.get("/portal/{token}", response_class=HTMLResponse)
 async def pagina_portal_aluno(token: str, request: Request, db: Session = Depends(get_db)):
-    # Agora buscamos o aluno pelo token_acesso em vez do ID
+    # 1. Definir o fuso horário de Brasília
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    # Pegamos o "agora" no Brasil e removemos a informação de fuso para comparar com o banco
+    agora_br = datetime.now(fuso_br).replace(tzinfo=None)
+
     aluno = db.query(models.Aluno).filter(models.Aluno.token_acesso == token).first()
     
     if not aluno:
         return HTMLResponse(content="Link de acesso inválido ou expirado.", status_code=404)
 
-    # Busca aulas futuras usando o ID do aluno encontrado pelo token
+    # 2. Busca aulas usando o horário corrigido
+    # Subtraímos 1 hora do 'agora' para garantir que a aula que está acontecendo AGORA ainda apareça
     aulas_aluno = db.query(models.Aula).filter(
         models.Aula.aluno_id == aluno.id,
         models.Aula.status == "marcada",
-        models.Aula.data_inicio >= datetime.now()
+        models.Aula.data_inicio >= (agora_br - timedelta(hours=1))
     ).order_by(models.Aula.data_inicio).all()
 
     contexto_aluno = {
@@ -213,7 +220,18 @@ async def reagendar_aula(
             aula.lembrete_enviado = False
 
         db.commit()
-        # Em vez de RedirectResponse, retorne apenas os dados
+        try:
+            link_portal = f"https://smart-booking-saas.onrender.com/portal/{token}"
+            msg_reagendado = (
+                f"Tudo certo, {aluno.nome}! ✅\n"
+                f"Sua aula foi remarcada para: *{data_dt.strftime('%d/%m às %H:%M')}*.\n\n"
+                f"Veja seus horários no portal:\n{link_portal}"
+            )
+            enviar_whatsapp(aluno.telefone, msg_reagendado)
+        except Exception as e:
+            print(f"Erro ao avisar reagendamento: {e}")
+        # ---------------------------------------------
+
         return RedirectResponse(url=f"/portal/{token}?sucesso=true", status_code=303)
 
     except Exception as e:
