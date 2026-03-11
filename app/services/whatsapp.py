@@ -3,9 +3,12 @@ import os
 import json
 
 # Pegamos as configurações do ambiente (Render)
-EVO_URL = os.getenv("EVOLUTION_URL")
-EVO_KEY = os.getenv("EVOLUTION_API_KEY")
-EVO_INSTANCE = os.getenv("EVOLUTION_INSTANCE")
+EVO_URL = os.getenv("URL_WPP")
+EVO_KEY = os.getenv("TOKEN_WPP")
+EVO_INSTANCE = os.getenv("INSTANCIA_WPP")
+
+if not all([EVO_URL, EVO_KEY, EVO_INSTANCE]):
+    print("⚠️ ERRO: Uma ou mais variáveis do WhatsApp não foram carregadas!")
 
 def enviar_whatsapp(numero: str, mensagem: str):
     # 1. Limpa TUDO o que não for número
