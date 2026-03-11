@@ -25,7 +25,9 @@ STATIC_PATH = os.path.join(CURRENT_DIR, "static")
 TEMPLATES_PATH = os.path.join(CURRENT_DIR, "templates")
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
-SENHA_MESTRA_HASH = pwd_context.hash("8899jgvb")
+ADMIN_USER = os.getenv("ADMIN_USER", "OneLanguage")
+ADMIN_PASS_RAW = os.getenv("ADMIN_PASS", "8899jgvb")
+SENHA_MESTRA_HASH = pwd_context.hash(ADMIN_PASS_RAW)
 
 # --- AGENDADOR (SCHEDULER) ---
 # Definimos aqui antes do lifespan para evitar erro de "não definido"
@@ -61,21 +63,19 @@ app.include_router(webhook.router)
 
 @app.post("/token")
 async def login(dados: dict):
-    usuario_db = "admin"
     
-    # Pegamos o que veio do formulário
     username = dados.get("username")
     password = dados.get("password")
 
     # Verificamos se o usuário bate e se a senha confere com o hash fixo
-    if username != usuario_db or not pwd_context.verify(password, SENHA_MESTRA_HASH):
+    if username != ADMIN_USER or not pwd_context.verify(password, SENHA_MESTRA_HASH):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Credenciais inválidas"
         )
 
     # Se passou, gera o token
-    token = criar_token_acesso(dados={"sub": usuario_db})
+    token = criar_token_acesso(dados={"sub": ADMIN_USER})
     return {"access_token": token, "token_type": "bearer"}
 
 # --- ROTAS DE PÁGINAS ---
