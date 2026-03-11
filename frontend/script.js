@@ -375,6 +375,7 @@ async function abrirModalTurma() {
                 <div>
                     <label class="text-[10px] font-bold uppercase text-slate-400">Modalidade</label>
                     <select id="t-tipo" class="swal2-input-custom">
+                        <option value="VIP">VIP (1 aluno)</option>
                         <option value="TEAM">TEAM (até 6)</option>
                         <option value="DUO">DUO (2 alunos)</option>
                     </select>
