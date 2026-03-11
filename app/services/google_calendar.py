@@ -20,18 +20,33 @@ if not os.path.exists(CREDENTIALS_PATH):
 # CONEXÃO
 # ==============================
 def conectar_google():
-    creds = None
-    if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+    # Tenta pegar das variáveis de ambiente (Render)
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN")
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+    if client_id and client_secret and refresh_token:
+        # Se estiver no Render, monta as credenciais direto da memória
+        creds = Credentials(
+            None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=SCOPES
+        )
+    else:
+        # Se estiver no Localhost, tenta ler os arquivos (seu código antigo)
+        BASE_DIR = os.getcwd()
+        TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+        if os.path.exists(TOKEN_PATH):
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, "w") as token:
-            token.write(creds.to_json())
+            raise Exception("Credenciais do Google não encontradas no Ambiente nem no token.json")
+
+    # Atualiza o token se estiver expirado
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
 
     return build('calendar', 'v3', credentials=creds)
 
