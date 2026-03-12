@@ -1,3 +1,5 @@
+import pytz
+import os   
 import traceback
 from typing import Optional
 from fastapi import APIRouter, Form, HTTPException, Depends, Query as FastAPIQuery
@@ -303,28 +305,39 @@ def deletar_grade(id: int, db: Session = Depends(get_db), usuario: str = Depends
 
 @router.get("/lista-professor")
 def listar_aulas_professor(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
-    agora = datetime.now()
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    # Pegamos o agora no Brasil para filtrar corretamente
+    agora_br = datetime.now(fuso_br).replace(tzinfo=None)
+    
+    # Filtramos aulas que terminam a partir de 3 horas atrás (margem de segurança)
     resultados = db.query(Aula, Aluno, HistoricoAula.id).\
         join(Aluno, Aula.aluno_id == Aluno.id).\
         outerjoin(HistoricoAula, (HistoricoAula.aluno_id == Aula.aluno_id) & (func.date(HistoricoAula.data_aula) == func.date(Aula.data_inicio))).\
-        filter(Aula.data_fim >= agora - timedelta(hours=3)).filter(Aula.status == StatusAula.marcada).\
+        filter(Aula.data_fim >= agora_br - timedelta(hours=3)).\
+        filter(Aula.status == StatusAula.marcada).\
         order_by(Aula.data_inicio.asc()).all()
     
     agrupado = {}
     for aula, aluno, historico_id in resultados:
         id_para_presenca = historico_id if historico_id else aula.id
+        # Chave de agrupamento: Data + Turma (ou ID do aluno se for VIP)
         chave = f"{aula.data_inicio.isoformat()}_{aula.turma_id or f'vip_{aluno.id}'}"
+        
         if chave not in agrupado:
             agrupado[chave] = {
                 "data_inicio": aula.data_inicio.isoformat(),
                 "turma_id": aula.turma_id,
-                "status": aula.status,
-                "nome_exibicao": aula.turma.nome_turma if aula.turma_id else f"{aluno.nome} {aluno.sobrenome or ''}",
-                "tipo": aula.turma.tipo if aula.turma_id else str(aluno.tipo),
+                "status": aula.status.name if hasattr(aula.status, 'name') else str(aula.status),
+                "nome_exibicao": aula.turma.nome_turma if aula.turma_id and aula.turma else f"{aluno.nome} {aluno.sobrenome or ''}",
+                "tipo": "TURMA" if aula.turma_id else "VIP",
                 "is_turma": bool(aula.turma_id),
                 "alunos": []
             }
-        agrupado[chave]["alunos"].append({"aula_id": id_para_presenca, "aluno_id": aluno.id, "nome": f"{aluno.nome} {aluno.sobrenome or ''}"})
+        agrupado[chave]["alunos"].append({
+            "aula_id": id_para_presenca, 
+            "aluno_id": aluno.id, 
+            "nome": f"{aluno.nome} {aluno.sobrenome or ''}"
+        })
     return list(agrupado.values())
 
 @router.patch("/{aula_id}/presenca")
