@@ -33,10 +33,17 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
 
         fim = inicio + timedelta(hours=1)
         
+        print(f"--- DEBUG MARCAR ---")
+        print(f"Aluno: {aluno.nome} | Tipo: {aluno.tipo} | Turma ID: {aluno.turma_id}")
+        
         lista_alunos = [aluno]
         if aluno.turma_id and aluno.tipo.value != "VIP":
             colegas = db.query(Aluno).filter(Aluno.turma_id == aluno.turma_id, Aluno.id != aluno.id).all()
+            print(f"Encontrei {len(colegas)} colegas de turma.")
             lista_alunos.extend(colegas)
+        
+        print(f"Total de aulas a criar: {len(lista_alunos)}")
+        print(f"--------------------")
         
         for pessoinha in lista_alunos:
             if eh_reposicao:
