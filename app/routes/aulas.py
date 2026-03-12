@@ -34,7 +34,7 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
         fim = inicio + timedelta(hours=1)
         
         lista_alunos = [aluno]
-        if aluno.turma_id and aluno.tipo != "VIP":
+        if aluno.turma_id and aluno.tipo.value != "VIP":
             colegas = db.query(Aluno).filter(Aluno.turma_id == aluno.turma_id, Aluno.id != aluno.id).all()
             lista_alunos.extend(colegas)
         
