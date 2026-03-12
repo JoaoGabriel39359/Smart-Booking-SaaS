@@ -79,16 +79,26 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
         if len(dados.get('aluno_ids', [])) > limite_max:
             raise HTTPException(status_code=400, detail="Limite de alunos excedido.")
 
+        horarios_recebidos = dados.get('horarios', [])
+        dias_extenso = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        
+        # 1. Prepara as strings de exibição para a tabela Turma (evita o NULL)
+        txt_dias = ", ".join([dias_extenso[int(h['dia'])] for h in horarios_recebidos])
+        txt_horas = ", ".join([h['hora'] for h in horarios_recebidos])
+
         nova_turma = Turma(
             nome_turma=dados.get('nome_turma'),
             tipo=dados.get('tipo'),
             duracao_minutos=int(dados.get('duracao_minutos', 60)),
-            capacidade_maxima=limite_max
+            capacidade_maxima=limite_max,
+            dia_semana=txt_dias if txt_dias else None,
+            horario=txt_horas if txt_horas else None
         )
         db.add(nova_turma)
-        db.flush() 
+        db.flush() # Gera o ID da turma para usar nos relacionamentos abaixo
 
-        for h in dados.get('horarios', []):
+        # 2. Salva os horários individuais na tabela horarios_aula
+        for h in horarios_recebidos:
             novo_h = HorarioAula(
                 turma_id=nova_turma.id,
                 dia_da_semana=int(h['dia']),
@@ -96,17 +106,30 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
             )
             db.add(novo_h)
 
-        alunos = db.query(Aluno).filter(Aluno.id.in_(dados.get('aluno_ids', []))).all()
-        for aluno in alunos:
-            aluno.turma_id = nova_turma.id
-            aluno.tipo = dados.get('tipo')
+        # 3. VINCULA OS ALUNOS (Importante: isso deve ser feito antes do gerar_aulas)
+        aluno_ids = dados.get('aluno_ids', [])
+        if aluno_ids:
+            # Busca os alunos no banco
+            alunos_no_db = db.query(Aluno).filter(Aluno.id.in_(aluno_ids)).all()
+            for aluno in alunos_no_db:
+                aluno.turma_id = nova_turma.id
+                # Atualizamos o tipo do aluno para bater com o da turma (VIP, DUO ou TEAM)
+                aluno.tipo = dados.get('tipo') 
 
+        # 4. Salva tudo no banco de uma vez
         db.commit()
-        gerar_aulas_da_semana(db) 
-        return {"msg": f"Turma {nova_turma.nome_turma} criada e aulas sincronizadas!"}
+
+        # 5. Gera a agenda (agora que os alunos já estão na turma)
+        try:
+            gerar_aulas_da_semana(db) 
+        except Exception as e_agenda:
+            print(f"Erro ao gerar agenda inicial: {e_agenda}")
+
+        return {"msg": f"Turma {nova_turma.nome_turma} criada com {len(horarios_recebidos)} horários!"}
         
     except Exception as e:
         db.rollback()
+        print(f"Erro crítico ao criar turma: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # --- GERAR MENSAL (VERSÃO UNIFICADA) ---
