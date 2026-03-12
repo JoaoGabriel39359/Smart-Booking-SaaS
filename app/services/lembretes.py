@@ -29,9 +29,9 @@ def verificar_lembretes(db: Session):
             horario = aula.data_inicio.strftime('%H:%M')
             
             msg = (
-                    f"Ei {nome_aluno}! 👋\n\n"
-                    f"Passando para avisar que sua aula começa em *20 minutos* ({horario}).\n"
-                    f"Já está pronto(a)?"
+                    f"Hello {nome_aluno}! 👋\n\n"
+                    f"Passing by to let you know that your class starts in *20 minutes* ({horario}).\n"
+                    f"Are you ready? ⏰📚"
                 )
             
             sucesso = enviar_whatsapp(aula.aluno.telefone, msg)
