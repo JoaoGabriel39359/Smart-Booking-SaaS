@@ -76,7 +76,7 @@ def gerar_aulas_da_semana(db=None):
                         # 2. SALVA NO HISTÓRICO (Para a chamada pedagógica)
                         nova_hist = HistoricoAula(
                             aluno_id=aluno.id,
-                            data_aula=inicio_dt, # DATA + HORA
+                            data_aula=inicio_dt.date(), # DATA + HORA
                             status_presenca=False,
                             chamada_realizada=False,
                             observacao=f"Agendamento Mensal - {duracao_aula}min",

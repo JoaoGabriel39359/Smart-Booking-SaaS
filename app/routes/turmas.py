@@ -166,40 +166,48 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
         if not turma:
             raise HTTPException(status_code=404, detail="Turma não encontrada")
 
-        # 1. Pegar IDs dos alunos para limpar o histórico
+        # 1. Pegar IDs dos alunos para referências futuras
         alunos = db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).all()
         alunos_ids = [a.id for a in alunos]
 
-        # 2. Tentar remover do Google (em um bloco separado para não travar o banco)
-        aulas_com_google = db.query(models.HistoricoAula.google_event_id).filter(
-            models.HistoricoAula.aluno_id.in_(alunos_ids),
-            models.HistoricoAula.google_event_id != None
-        ).all()
+        # 2. Coletar e remover eventos do Google Agenda (de ambas as tabelas)
+        # Buscamos IDs tanto da tabela Aula quanto da HistoricoAula
+        eventos_agenda = db.query(models.Aula.google_event_id).filter(models.Aula.turma_id == turma_id).all()
+        eventos_hist = db.query(models.HistoricoAula.google_event_id).filter(models.HistoricoAula.aluno_id.in_(alunos_ids)).all() if alunos_ids else []
+        
+        # Unificamos os IDs únicos para não tentar deletar o mesmo evento duas vezes
+        todos_g_ids = set([e[0] for e in eventos_agenda if e[0]] + [e[0] for e in eventos_hist if e[0]])
 
-        for (g_id,) in aulas_com_google:
+        for g_id in todos_g_ids:
             try:
-                # Se falhar aqui (por falta de credenciais no Render), o 'except' protege
                 remover_evento_google(g_id)
             except Exception as e:
-                print(f"Erro ao remover no Google: {e}")
+                print(f"Aviso Google (pode ignorar): {e}")
 
-        # 3. LIMPEZA MANUAL (Ordem correta para o Postgres não reclamar)
+        # 3. LIMPEZA NO BANCO DE DADOS (A ordem aqui é CRÍTICA)
+        
+        # Passo A: Apagar as Aulas da Agenda (Tabela 'aulas') - RESOLVE O ERRO DA FK
+        db.query(models.Aula).filter(models.Aula.turma_id == turma_id).delete(synchronize_session=False)
+
+        # Passo B: Limpar Horários Semanais (Tabela 'horarios_aula')
+        db.query(models.HorarioAula).filter(models.HorarioAula.turma_id == turma_id).delete(synchronize_session=False)
+
         if alunos_ids:
-            # Primeiro: Apaga o histórico vinculado aos alunos da turma
+            # Passo C: Apagar histórico dos alunos
             db.query(models.HistoricoAula).filter(models.HistoricoAula.aluno_id.in_(alunos_ids)).delete(synchronize_session=False)
             
-            # Segundo: Tira os alunos da turma (seta como NULL)
-            db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).update({"turma_id": None})
+            # Passo D: Desvincular alunos da turma (setar NULL)
+            db.query(models.Aluno).filter(models.Aluno.id.in_(alunos_ids)).update({"turma_id": None}, synchronize_session=False)
 
-        # 4. Agora sim: Apaga a Turma
+        # Passo E: Finalmente, apagar a Turma
         db.delete(turma)
-        db.commit() # SÓ AQUI ele salva tudo no banco
         
-        return {"msg": "Turma excluída com sucesso!"}
+        db.commit() 
+        return {"msg": "Turma e todos os agendamentos deletados com sucesso!"}
 
     except Exception as e:
         db.rollback()
-        print(f"ERRO CRÍTICO NO RENDER: {str(e)}")
+        print(f"ERRO AO DELETAR NO RENDER: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao deletar: {str(e)}")
 
 # --- ADICIONAR ALUNO ---
