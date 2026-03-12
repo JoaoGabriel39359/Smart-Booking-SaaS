@@ -124,7 +124,7 @@ async def pagina_portal_aluno(token: str, request: Request, db: Session = Depend
 
     aulas_aluno = db.query(models.Aula).filter(
         models.Aula.aluno_id == aluno.id,
-        models.Aula.status == "marcada",
+        models.Aula.status.in_(["marcada", models.StatusAula.marcada]),
         models.Aula.data_inicio >= filtro_hora
     ).order_by(models.Aula.data_inicio).all()
 

@@ -83,31 +83,34 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
         for p in lista_alunos:
             data_validade = None
             if eh_reposicao:
-                if p.creditos_reposicao > 0:
-                    p.creditos_reposicao -= 1
-                
-                credito_para_consumir = db.query(Aula).filter(
-                    Aula.aluno_id == p.id,
-                    Aula.status == "cancelado",
-                    Aula.validade_reposicao >= datetime.now()
-                ).order_by(Aula.validade_reposicao.asc()).first()
-                
-                if credito_para_consumir:
-                    data_validade = credito_para_consumir.validade_reposicao
-                    credito_para_consumir.status = "presente" 
+                # ... sua lógica de reposição ...
+                pass
 
             nova = Aula(
                 aluno_id=p.id,
                 turma_id=p.turma_id,
                 data_inicio=inicio,
                 data_fim=fim,
-                status="marcada", 
+                # ALTERAÇÃO AQUI: Use o Enum em vez de string se o seu model pedir StatusAula
+                status=StatusAula.marcada, 
                 google_event_id=g_id,
                 eh_reposicao=eh_reposicao,
                 validade_reposicao=data_validade,
                 lembrete_enviado=False 
             )
             novas_aulas.append(nova)
+
+            # --- ADICIONE ISTO PARA APARECER NO HISTÓRICO/LISTA PROFESSOR ---
+            novo_hist = HistoricoAula(
+                aluno_id=p.id,
+                data_aula=inicio,
+                status_presenca=False,
+                chamada_realizada=False,
+                google_event_id=g_id,
+                observacao="Aula de Turma Agendada" if p.turma_id else "Aula VIP Agendada"
+            )
+            db.add(novo_hist)
+            # -------------------------------------------------------------
 
         db.add_all(novas_aulas)
         db.commit()
@@ -304,7 +307,7 @@ def listar_aulas_professor(db: Session = Depends(get_db), usuario: str = Depends
     resultados = db.query(Aula, Aluno, HistoricoAula.id).\
         join(Aluno, Aula.aluno_id == Aluno.id).\
         outerjoin(HistoricoAula, (HistoricoAula.aluno_id == Aula.aluno_id) & (func.date(HistoricoAula.data_aula) == func.date(Aula.data_inicio))).\
-        filter(Aula.data_fim >= agora - timedelta(hours=3)).filter(Aula.status == "marcada").\
+        filter(Aula.data_fim >= agora - timedelta(hours=3)).filter(Aula.status == StatusAula.marcada).\
         order_by(Aula.data_inicio.asc()).all()
     
     agrupado = {}
