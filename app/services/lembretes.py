@@ -57,14 +57,16 @@ def rota_verificar_lembretes(db: Session = Depends(get_db)):
 def verificar_lembretes_background():
     db = SessionLocal()
     try:
+        verificar_lembretes(db)
         agora = datetime.now()
         # Procura aulas em exatas 10 horas
         check_10h = agora + timedelta(hours=10)
         
         aulas_10h = db.query(Aula).filter(
             Aula.data_inicio >= check_10h,
-            Aula.data_inicio <= check_10h + timedelta(minutes=1),
-            Aula.status == "marcada"
+            Aula.data_inicio <= check_10h + timedelta(minutes=5),
+            Aula.status == "marcada",
+            Aula.lembrete_10h_enviado == False
         ).all()
 
         for aula in aulas_10h:
@@ -75,6 +77,8 @@ def verificar_lembretes_background():
                     f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
                     f"Lembrando: você pode reagendar pelo portal com até 3h de antecedência."
                 )
-                enviar_whatsapp(aluno.telefone, msg)
+                enviar_whatsapp(aluno.telefone, msg) 
+        
+        db.commit()
     finally:
         db.close()

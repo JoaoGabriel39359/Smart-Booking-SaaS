@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Importações do seu projeto
+from app.services import lembretes
 from app.services.google_calendar import criar_evento, remover_evento_google
 from app.routes import alunos, aulas, webhook, turmas 
 from app.database import Base, engine, get_db
@@ -64,6 +65,7 @@ app.include_router(turmas.router)
 app.include_router(alunos.router)
 app.include_router(aulas.router)
 app.include_router(webhook.router)
+app.include_router(lembretes.router)
 
 @app.post("/token")
 async def login(dados: dict):
