@@ -79,7 +79,8 @@ def verificar_lembretes_background():
                 msg = (
                     f"Olá {aluno.nome}, passando para confirmar sua aula em 10 horas! 🎓\n"
                     f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
-                    f"Você pode ver os detalhes ou reagendar pelo seu portal:\n{link_portal}\n\n"
+                    f"Você pode ver os detalhes ou reagendar pelo seu portal no link abaixo:\n\n" 
+                    f"{link_portal}\n\n"
                     f"Lembrando: você pode reagendar com até 3h de antecedência."
                 )
                 sucesso = enviar_whatsapp(aluno.telefone, msg)
