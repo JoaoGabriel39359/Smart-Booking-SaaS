@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db, SessionLocal 
-from app.models import Aula
+from app.models import Aula, StatusAula, TipoAluno
 from app.services.whatsapp import enviar_whatsapp
 
 router = APIRouter(prefix="/jobs", tags=["automação"])
@@ -16,7 +16,7 @@ def verificar_lembretes(db: Session):
     janela_20min = agora + timedelta(minutes=25)
 
     aulas = db.query(Aula).filter(
-        Aula.status == "marcada",
+        Aula.status == StatusAula.marcada,
         Aula.lembrete_enviado == False,
         Aula.data_inicio >= agora,
         Aula.data_inicio <= janela_20min
@@ -55,6 +55,7 @@ def rota_verificar_lembretes(db: Session = Depends(get_db)):
 
 # --- 3. FUNÇÃO PARA O SCHEDULER (O VIGIA AUTOMÁTICO) ---
 def verificar_lembretes_background():
+    print(f"Colunas detectadas em Aula: {dir(Aula)}")
     db = SessionLocal()
     try:
         verificar_lembretes(db)
@@ -65,13 +66,13 @@ def verificar_lembretes_background():
         aulas_10h = db.query(Aula).filter(
             Aula.data_inicio >= check_10h,
             Aula.data_inicio <= check_10h + timedelta(minutes=5),
-            Aula.status == "marcada",
+            Aula.status == StatusAula.marcada,
             Aula.lembrete_10h_enviado == False
         ).all()
 
         for aula in aulas_10h:
             aluno = aula.aluno
-            if aluno.tipo == "VIP":
+            if aluno.tipo == TipoAluno.VIP:
                 token_do_aluno = aluno.token_acesso
                 link_portal = f"https://smart-booking-saas.onrender.com/portal/{token_do_aluno}"
 
