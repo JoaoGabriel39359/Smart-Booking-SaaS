@@ -239,7 +239,8 @@ def horarios_livres(data: str, token: str = None, db: Session = Depends(get_db))
 # ==============================
 @router.post("/{aula_id}/cancelar/{token}")
 def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)):
-    agora = datetime.now()
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    agora = datetime.now(fuso_br).replace(tzinfo=None)
     aula = db.query(Aula).join(Aluno).filter(Aula.id == aula_id, Aluno.token_acesso == token).first()
     if not aula:
         raise HTTPException(status_code=404, detail="Aula não encontrada.")

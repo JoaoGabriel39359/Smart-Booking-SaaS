@@ -72,13 +72,20 @@ def verificar_lembretes_background():
         for aula in aulas_10h:
             aluno = aula.aluno
             if aluno.tipo == "VIP":
+                token_do_aluno = aluno.token_acesso
+                link_portal = f"https://smart-booking-saas.onrender.com/portal/{token_do_aluno}"
+
                 msg = (
                     f"Olá {aluno.nome}, passando para confirmar sua aula em 10 horas! 🎓\n"
                     f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
                     f"Você pode ver os detalhes ou reagendar pelo seu portal:\n{link_portal}\n\n"
                     f"Lembrando: você pode reagendar com até 3h de antecedência."
                 )
-                enviar_whatsapp(aluno.telefone, msg) 
+                sucesso = enviar_whatsapp(aluno.telefone, msg)
+                
+                if sucesso:
+                    aula.lembrete_10h_enviado = True
+                    print(f"✅ Lembrete 10h enviado para VIP: {aluno.nome}")
         
         db.commit()
     finally:
