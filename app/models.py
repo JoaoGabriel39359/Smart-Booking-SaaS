@@ -49,6 +49,7 @@ class Aula(Base):
     turma_id = Column(Integer, ForeignKey("turmas.id"), nullable=True) 
     
     lembrete_enviado = Column(Boolean, default=False)
+    lembrete_10h_enviado = Column(Boolean, default=False)
     data_inicio = Column(DateTime)
     data_fim = Column(DateTime, nullable=True) # Deixei como nullable caso o gerador não envie
     status = Column(Enum(StatusAula), default=StatusAula.marcada)
