@@ -1,18 +1,21 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+import holidays
 from app.database import get_db, SessionLocal 
 from app.models import Aula, StatusAula, TipoAluno
 from app.services.whatsapp import enviar_whatsapp
 
 router = APIRouter(prefix="/jobs", tags=["automação"])
+feriados_br = holidays.country_holidays('BR')
 
-# --- 1. A FUNÇÃO QUE O SISTEMA JÁ CONHECE ---
 def verificar_lembretes(db: Session):
-    """
-    Mantivemos o nome original. Esta função faz a lógica.
-    """
     agora = datetime.now()
+
+    if agora in feriados_br:
+        print(f"😴 Hoje é {feriados_br.get(agora)}. Lembretes de 20min pausados.")
+        return 0
+    
     janela_20min = agora + timedelta(minutes=25)
 
     aulas = db.query(Aula).filter(
@@ -47,28 +50,27 @@ def verificar_lembretes(db: Session):
     
     return enviados
 
-# --- 2. ROTA PARA O NAVEGADOR ---
 @router.get("/verificar-lembretes")
 def rota_verificar_lembretes(db: Session = Depends(get_db)):
     total = verificar_lembretes(db)
     return {"status": "sucesso", "lembretes_enviados": total}
 
-# --- 3. FUNÇÃO PARA O SCHEDULER (O VIGIA AUTOMÁTICO) ---
 def verificar_lembretes_background():
-    print(f"Colunas detectadas em Aula: {dir(Aula)}")
     db = SessionLocal()
     try:
         verificar_lembretes(db)
         agora = datetime.now()
-        # Procura aulas em exatas 10 horas
         check_10h = agora + timedelta(hours=10)
-        
-        aulas_10h = db.query(Aula).filter(
-            Aula.data_inicio >= check_10h,
-            Aula.data_inicio <= check_10h + timedelta(minutes=5),
-            Aula.status == StatusAula.marcada,
-            Aula.lembrete_10h_enviado == False
-        ).all()
+
+        if check_10h in feriados_br:
+            print(f"🏖️ Aula em 10h cai em feriado ({feriados_br.get(check_10h)}). Pulando notificação.")
+        else:
+            aulas_10h = db.query(Aula).filter(
+                Aula.data_inicio >= check_10h,
+                Aula.data_inicio <= check_10h + timedelta(minutes=5),
+                Aula.status == StatusAula.marcada,
+                Aula.lembrete_10h_enviado == False
+            ).all()
 
         for aula in aulas_10h:
             aluno = aula.aluno
