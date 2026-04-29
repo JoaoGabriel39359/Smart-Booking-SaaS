@@ -70,7 +70,7 @@ def verificar_lembretes_background():
                 Aula.data_inicio >= check_24h,
                 Aula.data_inicio <= check_24h + timedelta(minutes=5),
                 Aula.status == StatusAula.marcada,
-                Aula.lembrete_24h_enviado == False
+                Aula.lembrete_10h_enviado == False
             ).all()
 
             for aula in aulas_24h:
@@ -89,7 +89,7 @@ def verificar_lembretes_background():
                     sucesso = enviar_whatsapp(aluno.telefone, msg)
                     
                     if sucesso:
-                        aula.lembrete_24h_enviado = True
+                        aula.lembrete_10h_enviado = True
                         print(f"✅ Lembrete 24h enviado para VIP: {aluno.nome}")
         
         db.commit()
