@@ -13,16 +13,17 @@ def verificar_lembretes(db: Session):
     agora = datetime.now()
 
     if agora in feriados_br:
-        print(f"😴 Hoje é {feriados_br.get(agora)}. Lembretes de 20min pausados.")
+        print(f"😴 Hoje é {feriados_br.get(agora)}. Lembretes pausados.")
         return 0
     
-    janela_20min = agora + timedelta(minutes=25)
+    inicio_janela = agora + timedelta(minutes=60)
+    fim_janela = agora + timedelta(minutes=65)
 
     aulas = db.query(Aula).filter(
         Aula.status == StatusAula.marcada,
         Aula.lembrete_enviado == False,
-        Aula.data_inicio >= agora,
-        Aula.data_inicio <= janela_20min
+        Aula.data_inicio >= inicio_janela,
+        Aula.data_inicio <= fim_janela
     ).all()
 
     enviados = 0
@@ -33,7 +34,7 @@ def verificar_lembretes(db: Session):
             
             msg = (
                     f"Hello {nome_aluno}! 👋\n\n"
-                    f"Passing by to let you know that your class starts in *20 minutes* ({horario}).\n"
+                    f"Passing by to let you know that your class starts in *1 hour* ({horario}).\n"
                     f"Are you ready? ⏰📚"
                 )
             
@@ -60,36 +61,36 @@ def verificar_lembretes_background():
     try:
         verificar_lembretes(db)
         agora = datetime.now()
-        check_10h = agora + timedelta(hours=10)
+        check_24h = agora + timedelta(hours=24)
 
-        if check_10h in feriados_br:
-            print(f"🏖️ Aula em 10h cai em feriado ({feriados_br.get(check_10h)}). Pulando notificação.")
+        if check_24h in feriados_br:
+            print(f"🏖️ Aula em 24h cai em feriado ({feriados_br.get(check_24h)}). Pulando notificação.")
         else:
-            aulas_10h = db.query(Aula).filter(
-                Aula.data_inicio >= check_10h,
-                Aula.data_inicio <= check_10h + timedelta(minutes=5),
+            aulas_24h = db.query(Aula).filter(
+                Aula.data_inicio >= check_24h,
+                Aula.data_inicio <= check_24h + timedelta(minutes=5),
                 Aula.status == StatusAula.marcada,
-                Aula.lembrete_10h_enviado == False
+                Aula.lembrete_24h_enviado == False
             ).all()
 
-        for aula in aulas_10h:
-            aluno = aula.aluno
-            if aluno.tipo == TipoAluno.VIP:
-                token_do_aluno = aluno.token_acesso
-                link_portal = f"https://smart-booking-saas.onrender.com/portal/{token_do_aluno}"
+            for aula in aulas_24h:
+                aluno = aula.aluno
+                if aluno.tipo == TipoAluno.VIP:
+                    token_do_aluno = aluno.token_acesso
+                    link_portal = f"https://smart-booking-saas.onrender.com/portal/{token_do_aluno}"
 
-                msg = (
-                    f"Olá {aluno.nome}, passando para confirmar sua aula em 10 horas! 🎓\n"
-                    f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
-                    f"Você pode ver os detalhes ou reagendar pelo seu portal no link abaixo:\n\n" 
-                    f"{link_portal}\n\n"
-                    f"Lembrando: você pode reagendar com até 3h de antecedência."
-                )
-                sucesso = enviar_whatsapp(aluno.telefone, msg)
-                
-                if sucesso:
-                    aula.lembrete_10h_enviado = True
-                    print(f"✅ Lembrete 10h enviado para VIP: {aluno.nome}")
+                    msg = (
+                        f"Olá {aluno.nome}, passando para confirmar sua aula de amanhã! 🎓\n"
+                        f"Horário: *{aula.data_inicio.strftime('%H:%M')}*\n\n"
+                        f"Você pode ver os detalhes ou reagendar pelo seu portal no link abaixo:\n\n" 
+                        f"{link_portal}\n\n"
+                        f"Lembrando: você pode reagendar com até 3h de antecedência."
+                    )
+                    sucesso = enviar_whatsapp(aluno.telefone, msg)
+                    
+                    if sucesso:
+                        aula.lembrete_24h_enviado = True
+                        print(f"✅ Lembrete 24h enviado para VIP: {aluno.nome}")
         
         db.commit()
     finally:
