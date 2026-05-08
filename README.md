@@ -69,7 +69,6 @@ O sistema conta com um script auxiliar para gerar o token.json inicial do profes
 
 Bash: 
 python gerar_token.py
-Inicie o Servidor:
 
-Bash: 
+Inicie o Servidor:
 uvicorn app.main:app --host 0.0.0.0 --port 8000

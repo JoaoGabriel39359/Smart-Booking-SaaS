@@ -6,7 +6,7 @@ from app.services.whatsapp import enviar_whatsapp
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -149,6 +149,7 @@ async def pagina_portal_aluno(token: str, request: Request, db: Session = Depend
 @app.post("/reagendar/{token}")
 async def reagendar_aula(
     token: str, 
+    background_tasks: BackgroundTasks,
     aula_id: int = Form(...), 
     nova_data: str = Form(...), 
     db: Session = Depends(get_db)
@@ -222,16 +223,13 @@ async def reagendar_aula(
             aula.lembrete_enviado = False
 
         db.commit()
-        try:
-            link_portal = f"https://smart-booking-saas.onrender.com/portal/{token}"
-            msg_reagendado = (
-                f"Tudo certo, {aluno.nome}! ✅\n"
-                f"Sua aula foi remarcada para: *{data_dt.strftime('%d/%m às %H:%M')}*.\n\n"
-                f"Veja seus horários no portal:\n{link_portal}"
-            )
-            enviar_whatsapp(aluno.telefone, msg_reagendado)
-        except Exception as e:
-            print(f"Erro ao avisar reagendamento: {e}")
+        link_portal = f"https://smart-booking-saas.onrender.com/portal/{token}"
+        msg_reagendado = (
+            f"Tudo certo, {aluno.nome}! ✅\n"
+            f"Sua aula foi remarcada para: *{data_dt.strftime('%d/%m às %H:%M')}*.\n\n"
+            f"Veja seus horários no portal:\n{link_portal}"
+        )
+        background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg_reagendado)
         # ---------------------------------------------
 
         return RedirectResponse(url=f"/portal/{token}?sucesso=true", status_code=303)

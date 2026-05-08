@@ -2,7 +2,7 @@ import pytz
 import os   
 import traceback
 from typing import Optional
-from fastapi import APIRouter, Form, HTTPException, Depends, Query as FastAPIQuery
+from fastapi import APIRouter, Form, HTTPException, Depends, BackgroundTasks, Query as FastAPIQuery
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.auth import verificar_token
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/aulas", tags=["aulas"])
 # MARCAR AULA
 # ==============================
 @router.post("/marcar")
-def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def marcar_aula(aluno_id: int, data: str, hora: str, background_tasks: BackgroundTasks, eh_reposicao: bool = False, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
     try:
         aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
         if not aluno:
@@ -125,16 +125,13 @@ def marcar_aula(aluno_id: int, data: str, hora: str, eh_reposicao: bool = False,
         db.commit()
         
         for aula_criada in novas_aulas:
-            try:
-                msg_confirmacao = (
-                    f"Agendado com sucesso, {aula_criada.aluno.nome}! ✅\n\n"
-                    f"Sua aula será dia {aula_criada.data_inicio.strftime('%d/%m')} "
-                    f"às {aula_criada.data_inicio.strftime('%H:%M')}.\n"
-                    f"{'★ Aula de Reposição' if eh_reposicao else ''}"
-                )
-                enviar_whatsapp(aula_criada.aluno.telefone, msg_confirmacao)
-            except Exception as e:
-                print(f"Erro ao avisar aluno no Zap: {e}")
+            msg_confirmacao = (
+                f"Agendado com sucesso, {aula_criada.aluno.nome}! ✅\n\n"
+                f"Sua aula será dia {aula_criada.data_inicio.strftime('%d/%m')} "
+                f"às {aula_criada.data_inicio.strftime('%H:%M')}.\n"
+                f"{'★ Aula de Reposição' if eh_reposicao else ''}"
+            )
+            background_tasks.add_task(enviar_whatsapp, aula_criada.aluno.telefone, msg_confirmacao)
 
         return {"status": "sucesso", "event_id": g_id, "google_sync": True if g_id else False}
 
@@ -238,7 +235,7 @@ def horarios_livres(data: str, token: str = None, db: Session = Depends(get_db))
 # CANCELAR AULA (PORTAL)
 # ==============================
 @router.post("/{aula_id}/cancelar/{token}")
-def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)):
+def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     fuso_br = pytz.timezone('America/Sao_Paulo')
     agora = datetime.now(fuso_br).replace(tzinfo=None)
     aula = db.query(Aula).join(Aluno).filter(Aula.id == aula_id, Aluno.token_acesso == token).first()
@@ -284,10 +281,9 @@ def cancelar_aula(aula_id: int, token: str, db: Session = Depends(get_db)):
     else:
         msg += "\n❌ Sem direito a reposição (cancelamento tardio)."
     
-    try:
-        enviar_whatsapp(aluno.telefone, msg)
-    except:
-        pass
+    background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg)
+
+    return {"status": "sucesso", "creditos": aluno.creditos_reposicao}
 
 # ==============================
 # GRADE E HISTÓRICO (ADMIN)
