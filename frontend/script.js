@@ -355,6 +355,7 @@ async function abrirModalTurma() {
                             <option value="2">Quarta</option>
                             <option value="3">Quinta</option>
                             <option value="4">Sexta</option>
+                            <option value="5">Sábado</option>
                         </select>
                         <input type="time" id="t-hora-add" class="text-xs p-2 rounded-lg border w-24 outline-none">
                         <button type="button" id="btn-add-hora" class="bg-indigo-600 text-white px-4 rounded-lg font-black hover:bg-indigo-700 transition">+</button>
@@ -410,10 +411,9 @@ async function abrirModalTurma() {
                 horariosDestaTurma.push(novoHorario);
                 
                 // Atualiza a visualização
-                const nomes = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
                 containerLista.innerHTML = horariosDestaTurma.map((h, i) => `
                     <div class="flex justify-between items-center bg-white p-2 rounded-lg border border-indigo-100 text-[10px] font-black text-indigo-600 shadow-sm animate-in fade-in zoom-in duration-200">
-                        <span><i class="fa-regular fa-clock mr-1"></i> ${nomes[h.dia]} às ${h.hora}</span>
+                        <span><i class="fa-regular fa-clock mr-1"></i> ${diasNome[h.dia]} às ${h.hora}</span>
                         <button type="button" class="text-red-400 hover:text-red-600 p-1" onclick="this.closest('div').remove();">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
