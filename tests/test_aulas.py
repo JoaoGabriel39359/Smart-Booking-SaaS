@@ -137,3 +137,82 @@ def test_acesso_portal_token_invalido(client):
     
     # O sistema deve retornar 404 (Não encontrado) ou redirecionar para erro
     assert response.status_code == 404
+
+def test_cancelar_aula_com_reposicao(client, db_session, mock_whatsapp):
+    token_aluno = str(uuid.uuid4())
+    aluno = models.Aluno(
+        nome="Fulano",
+        sobrenome="VIP",
+        telefone="5511999999999",
+        token_acesso=token_aluno,
+        creditos_reposicao=0,
+        tipo="VIP"
+    )
+    db_session.add(aluno)
+    db_session.commit()
+
+    # Aula em 4 horas (antecedência >= 3h)
+    aula = models.Aula(
+        aluno_id=aluno.id,
+        data_inicio=datetime.now() + timedelta(hours=4),
+        data_fim=datetime.now() + timedelta(hours=5),
+        status="marcada"
+    )
+    db_session.add(aula)
+    db_session.commit()
+
+    response = client.post(f"/aulas/{aula.id}/cancelar/{token_aluno}")
+    assert response.status_code == 200
+    
+    db_session.refresh(aula)
+    db_session.refresh(aluno)
+    
+    assert aula.status == models.StatusAula.cancelado
+    assert aluno.creditos_reposicao == 1
+
+    # Deve enviar duas mensagens de WhatsApp (uma para o aluno, outra para o professor)
+    assert mock_whatsapp.call_count == 2
+    
+    # Verifica chamadas do WhatsApp
+    chamadas = [call[0] for call in mock_whatsapp.call_args_list]
+    telefones_chamados = [c[0] for c in chamadas]
+    assert "5511999999999" in telefones_chamados
+    assert "5522992011011" in telefones_chamados
+
+def test_cancelar_aula_sem_reposicao(client, db_session, mock_whatsapp):
+    token_aluno = str(uuid.uuid4())
+    aluno = models.Aluno(
+        nome="Ciclano",
+        sobrenome="VIP",
+        telefone="5511888888888",
+        token_acesso=token_aluno,
+        creditos_reposicao=0,
+        tipo="VIP"
+    )
+    db_session.add(aluno)
+    db_session.commit()
+
+    # Aula em 1 hora (antecedência < 3h)
+    aula = models.Aula(
+        aluno_id=aluno.id,
+        data_inicio=datetime.now() + timedelta(hours=1),
+        data_fim=datetime.now() + timedelta(hours=2),
+        status="marcada"
+    )
+    db_session.add(aula)
+    db_session.commit()
+
+    response = client.post(f"/aulas/{aula.id}/cancelar/{token_aluno}")
+    assert response.status_code == 200
+    
+    db_session.refresh(aula)
+    db_session.refresh(aluno)
+    
+    assert aula.status == models.StatusAula.ausente
+    assert aluno.creditos_reposicao == 0
+
+    assert mock_whatsapp.call_count == 2
+    chamadas = [call[0] for call in mock_whatsapp.call_args_list]
+    telefones_chamados = [c[0] for c in chamadas]
+    assert "5511888888888" in telefones_chamados
+    assert "5522992011011" in telefones_chamados

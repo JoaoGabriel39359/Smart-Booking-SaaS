@@ -13,7 +13,7 @@ from app import models
 from app.models import Aluno, Aula, GradeProfessor, HorarioAula, HistoricoAula, StatusAula 
 from datetime import datetime, timedelta, time
 
-TELEFONE_PROFESSOR = "5524998739359"
+TELEFONE_PROFESSOR = os.getenv("TELEFONE_PROFESSOR", "5522992011011")
 router = APIRouter(prefix="/aulas", tags=["aulas"])
 
 # ==============================
@@ -282,6 +282,15 @@ def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, d
         msg += "\n❌ Sem direito a reposição (cancelamento tardio)."
     
     background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg)
+
+    # Notificação para o professor
+    msg_professor = (
+        f"🚨 *Aula Cancelada pelo Aluno* 🚨\n\n"
+        f"O aluno *{aluno.nome} {aluno.sobrenome or ''}* cancelou a aula de "
+        f"*{aula.data_inicio.strftime('%d/%m às %H:%M')}* pelo portal.\n\n"
+        f"{'✅ Crédito de reposição gerado.' if gera_reposicao else '❌ Sem direito a reposição (cancelamento tardio).'}"
+    )
+    background_tasks.add_task(enviar_whatsapp, TELEFONE_PROFESSOR, msg_professor)
 
     return {"status": "sucesso", "creditos": aluno.creditos_reposicao}
 

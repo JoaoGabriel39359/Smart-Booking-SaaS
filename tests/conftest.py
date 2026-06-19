@@ -43,6 +43,13 @@ def client(db_session):
 def mock_whatsapp(monkeypatch):
     """Finge o envio de WhatsApp para que os testes não gastem créditos ou enviem SPAM"""
     mock = MagicMock()
-    # Substitui a função real pela versão 'fake'
+    # Substitui a função real no local de definição
     monkeypatch.setattr(whatsapp, "enviar_whatsapp", mock)
+    # E também nos locais onde foi importada diretamente para os namespaces dos módulos
+    import app.routes.aulas
+    import app.main
+    import app.services.lembretes
+    monkeypatch.setattr(app.routes.aulas, "enviar_whatsapp", mock)
+    monkeypatch.setattr(app.main, "enviar_whatsapp", mock)
+    monkeypatch.setattr(app.services.lembretes, "enviar_whatsapp", mock)
     return mock
