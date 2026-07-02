@@ -77,8 +77,8 @@ def verificar_lembretes_background():
                 aluno = aula.aluno
 
                 if not aluno:
-                print(f"⚠️ Atenção: A aula ID {aula.id} está sem aluno vinculado ou o aluno foi deletado. Pulando...")
-                continue
+                    print(f"⚠️ Atenção: A aula ID {aula.id} está sem aluno vinculado ou o aluno foi deletado. Pulando...")
+                    continue
 
                 if aluno.tipo == TipoAluno.VIP:
                     token_do_aluno = aluno.token_acesso
