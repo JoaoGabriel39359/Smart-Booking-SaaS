@@ -32,6 +32,9 @@ def processar_geracao_aulas(db: Session, turma: Turma):
     aulas_criadas = 0
     data_atual = hoje
 
+    # Inicializamos o link com o que está gravado na turma (se houver)
+    link_meet_da_turma = turma.meet_link 
+
     while data_atual <= fim_periodo:
         if data_atual.weekday() == dia_alvo:
             hora_aula = datetime.strptime(turma.horario, "%H:%M").time()
@@ -41,8 +44,24 @@ def processar_geracao_aulas(db: Session, turma: Turma):
             google_id = None
             try:
                 titulo_google = f"Turma {turma.tipo}: {turma.nome_turma}"
-                google_id = criar_evento(data_inicio, data_fim, titulo_google)
-                print(f"✅ Sincronizado no Google: {data_inicio}")
+                
+                # Chamamos a função atualizada passando o link_meet_da_turma
+                # Ela retorna duas coisas: o ID do evento e o link
+                google_id, link_retornado = criar_evento(
+                    data_inicio, 
+                    data_fim, 
+                    titulo_google, 
+                    meet_link_existente=link_meet_da_turma
+                )
+                
+                # Se a turma não tinha link e o Google acabou de gerar o primeiro,
+                # nós salvamos ele para usar nas próximas semanas deste loop
+                if not link_meet_da_turma and link_retornado:
+                    link_meet_da_turma = link_retornado
+                    turma.meet_link = link_retornado
+                    db.flush()
+                
+                print(f"✅ Sincronizado no Google: {data_inicio} | Meet: {link_meet_da_turma}")
             except Exception as g_error:
                 print(f"❌ Erro Google Agenda: {g_error}")
 
@@ -60,6 +79,7 @@ def processar_geracao_aulas(db: Session, turma: Turma):
                         data_fim=data_fim,
                         status="marcada",
                         google_event_id=google_id
+                        # Se você quiser guardar o link na tabela 'aulas' também, adicione a coluna lá e chame: meet_link=link_meet_da_turma
                     )
                     db.add(nova_aula)
                     aulas_criadas += 1
@@ -92,7 +112,8 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
             duracao_minutos=int(dados.get('duracao_minutos', 60)),
             capacidade_maxima=limite_max,
             dia_semana=txt_dias if txt_dias else None,
-            horario=txt_horas if txt_horas else None
+            horario=txt_horas if txt_horas else None,
+            meet_link=dados.get('meet_link')
         )
         db.add(nova_turma)
         db.flush() # Gera o ID da turma para usar nos relacionamentos abaixo
@@ -132,6 +153,25 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
         print(f"Erro crítico ao criar turma: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.put("/{turma_id}")
+def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+    turma = db.query(Turma).filter(Turma.id == turma_id).first()
+    if not turma:
+        raise HTTPException(status_code=404, detail="Turma não encontrada")
+    
+    try:
+        # Atualiza apenas os campos permitidos vindos do front-end
+        if "nome_turma" in dados:
+            turma.nome_turma = dados.get("nome_turma")
+        if "meet_link" in dados:
+            turma.meet_link = dados.get("meet_link")
+            
+        db.commit()
+        return {"status": "sucesso", "msg": f"Turma {turma.nome_turma} atualizada!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro ao salvar: {str(e)}")
+
 # --- GERAR MENSAL (VERSÃO UNIFICADA) ---
 @router.post("/gerar-mensal")
 def rota_gerar_mensal(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
@@ -154,6 +194,7 @@ def listar_turmas(db: Session = Depends(get_db), usuario: str = Depends(verifica
             "dia_semana": t.dia_semana,
             "horario": t.horario,
             "capacidade_maxima": t.capacidade_maxima,
+            "meet_link": t.meet_link,
             "alunos": [{"id": a.id, "nome": a.nome, "sobrenome": a.sobrenome} for a in t.alunos]
         })
     return resultado

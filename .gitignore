@@ -22,3 +22,4 @@ client_secret*.json
 test.db
 .pytest_cache/
 __pycache__/
+database.py

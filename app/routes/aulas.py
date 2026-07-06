@@ -82,9 +82,10 @@ def marcar_aula(aluno_id: int, data: str, hora: str, background_tasks: Backgroun
             raise HTTPException(status_code=400, detail="Este horário já está ocupado.")
         
         g_id = None  
+        meet_link = None
         titulo_aula = f"Aula: {aluno.nome}" if len(lista_alunos) == 1 else f"Aula Turma: {aluno.turma.nome if aluno.turma else 'Coletiva'}"
         try:
-            g_id = criar_evento(inicio, fim, titulo_aula)
+            g_id, meet_link = criar_evento(inicio, fim, titulo_aula)
         except Exception as ge:
             print(f"DEBUG: Falha Google Calendar: {ge}")
 
@@ -105,7 +106,8 @@ def marcar_aula(aluno_id: int, data: str, hora: str, background_tasks: Backgroun
                 google_event_id=g_id,
                 eh_reposicao=eh_reposicao,
                 validade_reposicao=data_validade,
-                lembrete_enviado=False 
+                lembrete_enviado=False,
+                meet_link=meet_link 
             )
             novas_aulas.append(nova)
 
@@ -154,9 +156,10 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
         fim = inicio + timedelta(hours=1)
 
         google_event_id = None
+        meet_link_avulso = None
         titulo_aula = f"Aula VIP: {aluno.nome} {aluno.sobrenome or ''}"
         try:
-            google_event_id = criar_evento(inicio, fim, titulo_aula)
+            google_event_id, meet_link_avulso = criar_evento(inicio, fim, titulo_aula)
         except Exception as ge:
             print(f"DEBUG: Falha Google Calendar: {ge}")
 
@@ -169,7 +172,8 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
             data_aula=inicio,
             status_presenca=False,
             observacao="Aula Avulsa Agendada",
-            google_event_id=google_event_id
+            google_event_id=google_event_id,
+            meet_link=meet_link_avulso
         )
         db.add(novo_historico)
         db.commit()

@@ -53,15 +53,50 @@ def conectar_google():
 # ==============================
 # CRIAR EVENTO
 # ==============================
-def criar_evento(inicio: datetime, fim: datetime, nome_aluno: str):
+def criar_evento(inicio: datetime, fim: datetime, nome_aluno: str, meet_link_existente: str = None):
     service = conectar_google()
+    
     evento = {
         "summary": f"Aula - {nome_aluno}",
         "start": {"dateTime": inicio.isoformat(), "timeZone": "America/Sao_Paulo"},
         "end": {"dateTime": fim.isoformat(), "timeZone": "America/Sao_Paulo"},
     }
-    evento_criado = service.events().insert(calendarId="primary", body=evento).execute()
-    return evento_criado["id"]
+
+    # Cenário A: O professor já passou um link existente (ou já geramos um antes)
+    if meet_link_existente:
+        evento["description"] = f"Link da aula: {meet_link_existente}"
+        evento["location"] = meet_link_existente
+        evento["conferenceData"] = {
+            "entryPoints": [{"entryPointType": "video", "uri": meet_link_existente}],
+            "conferenceSolution": {"key": {"type": "hangoutsMeet"}}
+        }
+        
+        evento_criado = service.events().insert(
+            calendarId="primary", 
+            body=evento
+        ).execute()
+    
+    # Cenário B: Não há link nenhum, pedimos para o Google gerar um do zero
+    else:
+        evento["conferenceData"] = {
+            "createRequest": {
+                "requestId": f"meet_{int(inicio.timestamp())}",
+                "conferenceSolutionKey": {"type": "hangoutsMeet"}
+            }
+        }
+        
+        # conferenceDataVersion=1 é obrigatório para o Google processar o 'createRequest'
+        evento_criado = service.events().insert(
+            calendarId="primary", 
+            body=evento,
+            conferenceDataVersion=1 
+        ).execute()
+
+    # Captura o link que o Google acabou de gerar, ou mantém o que já existia
+    meet_link = evento_criado.get("hangoutLink") or meet_link_existente
+    
+    # Retorna o ID do Evento e o Link final do Meet
+    return evento_criado["id"], meet_link
 
 # ==============================
 # DELETAR EVENTO (remover_evento_google)

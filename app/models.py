@@ -83,6 +83,7 @@ class Turma(Base):
     # Relacionamento
     alunos = relationship("Aluno", back_populates="turma")
     horarios = relationship("HorarioAula", back_populates="turma")
+    meet_link = Column(String, nullable=True)
 
 class GradeProfessor(Base):
     __tablename__ = "grade_professor"

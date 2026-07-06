@@ -1,5 +1,5 @@
-const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
-    ? 'http://127.0.0.1:8000' 
+const API_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+    ? 'http://127.0.0.1:8000'
     : window.location.origin;
 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
 const diasNome = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
@@ -15,20 +15,20 @@ function trocarAba(aba) {
 
     const idAba = 'aba' + aba.charAt(0).toUpperCase() + aba.slice(1);
     const idBtn = 'btnTab' + aba.charAt(0).toUpperCase() + aba.slice(1);
-    
+
     document.getElementById(idAba).classList.remove('hidden');
     document.getElementById(idBtn).classList.add('active');
 
-    if(aba === 'agenda') carregarAgenda();
-    if(aba === 'alunos') carregarAlunos();
-    if(aba === 'turmas') carregarTurmas();
-    if(aba === 'grade') carregarTudoGrade();
-    if(aba === 'historico') carregarHistoricoGeral();
+    if (aba === 'agenda') carregarAgenda();
+    if (aba === 'alunos') carregarAlunos();
+    if (aba === 'turmas') carregarTurmas();
+    if (aba === 'grade') carregarTudoGrade();
+    if (aba === 'historico') carregarHistoricoGeral();
 }
 
 async function fetchProtegido(url, opcoes = {}) {
     const token = localStorage.getItem('token_professor');
-    
+
     const cabecalhos = {
         ...opcoes.headers,
         'Authorization': `Bearer ${token}`,
@@ -44,7 +44,7 @@ async function fetchProtegido(url, opcoes = {}) {
             if (document.getElementById('listaAgenda')) {
                 window.location.href = "/frontend/login.html";
             }
-            return { ok: false, json: async () => [] }; 
+            return { ok: false, json: async () => [] };
         }
 
         if (!resposta.ok) return { ok: false, json: async () => [] };
@@ -63,7 +63,7 @@ async function carregarAlunos() {
         const res = await fetchProtegido(`${API_URL}/alunos/`);
         const dados = await res.json();
         listaGlobalAlunos = dados;
-        
+
         container.innerHTML = ""; // Limpa a lista
 
         if (dados.length === 0) {
@@ -106,24 +106,24 @@ async function carregarAlunos() {
                     </button>
                 </div>
             </div>`;
-            
+
             container.innerHTML += card;
 
             // Atribuímos o clique de editar de forma manual para não dar erro de aspas
             setTimeout(() => {
                 const btn = document.getElementById(`edit-${aluno.id}`);
-                if(btn) btn.onclick = () => abrirModalEditarAluno(aluno);
+                if (btn) btn.onclick = () => abrirModalEditarAluno(aluno);
             }, 50);
         });
-    } catch (e) { 
-        console.error("Erro ao carregar:", e); 
+    } catch (e) {
+        console.error("Erro ao carregar:", e);
     }
 }
 
 async function adicionarAlunoNaTurma(turmaId) {
     // 1. Pergunta o ID do aluno (depois podemos evoluir para um <select>)
     const alunoId = prompt("Digite o ID do aluno que deseja adicionar a esta turma:");
-    
+
     if (!alunoId) return; // Cancela se o usuário não digitar nada
 
     try {
@@ -142,7 +142,7 @@ async function adicionarAlunoNaTurma(turmaId) {
             Swal.fire('Sucesso!', 'Aluno adicionado à turma.', 'success');
             // 3. Chama a função que você já tem para atualizar a lista na tela
             if (typeof carregarTurmas === "function") {
-                carregarTurmas(); 
+                carregarTurmas();
             } else {
                 location.reload();
             }
@@ -208,13 +208,13 @@ async function abrirModalAluno() {
         try {
             const res = await fetchProtegido(`${API_URL}/alunos/`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formValues)
             });
-            
-            if(res.ok) { 
-                Toast.fire({icon: 'success', title: 'Aluno cadastrado com sucesso!'}); 
-                carregarAlunos(); 
+
+            if (res.ok) {
+                Toast.fire({ icon: 'success', title: 'Aluno cadastrado com sucesso!' });
+                carregarAlunos();
             } else {
                 const erroDetalhado = await res.json();
                 console.error("Erro do Servidor:", erroDetalhado);
@@ -239,7 +239,7 @@ async function deletarAluno(id) {
         if (result.isConfirmed) {
             await fetchProtegido(`${API_URL}/alunos/${id}`, { method: 'DELETE' });
             carregarAlunos();
-            Toast.fire({icon: 'success', title: 'Excluído!'});
+            Toast.fire({ icon: 'success', title: 'Excluído!' });
         }
     });
 }
@@ -250,8 +250,8 @@ async function carregarTurmas() {
     try {
         const res = await fetchProtegido(`${API_URL}/turmas/`);
         const turmas = await res.json();
-        
-        container.innerHTML = ""; 
+
+        container.innerHTML = "";
 
         if (turmas.length === 0) {
             container.innerHTML = '<p class="col-span-full text-center py-10 text-slate-400">Nenhuma turma criada.</p>';
@@ -288,6 +288,18 @@ async function carregarTurmas() {
                     `).join('')}
                 </div>
 
+                <div class="mb-4">
+                    ${t.meet_link && t.meet_link.trim() !== "" ? `
+                        <a href="${t.meet_link.startsWith('http') ? t.meet_link : 'https://' + t.meet_link}" target="_blank" class="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase py-2 px-4 rounded-xl shadow-md transition-all text-center">
+                            <i class="fa-solid fa-video"></i> Entrar na Aula (Meet)
+                        </a>
+                    ` : `
+                        <p class="text class="text-[10px] text-center text-slate-400 font-bold uppercase italic bg-slate-50 p-2 rounded-xl border border-dashed border-slate-200">
+                            <i class="fa-solid fa-link-slash"></i> Nenhum link fixo cadastrado
+                        </p>
+                    `}
+                </div>
+
                 <div id="area-adicao-${t.id}" class="hidden mb-4 p-3 bg-indigo-50 rounded-xl border border-indigo-100 space-y-2">
                     <label class="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Selecionar Aluno Livre</label>
                     <select id="select-alunos-livres-${t.id}" class="w-full bg-white border border-indigo-200 rounded-lg px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
@@ -309,13 +321,23 @@ async function carregarTurmas() {
                         class="flex-1 text-[10px] font-bold uppercase p-2 rounded-lg ${estaCheia ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white'} transition">
                         <i class="fa-solid fa-plus"></i> Aluno
                     </button>
+
+                    <button id="btn-editar-turma-${t.id}" class="p-2 text-slate-300 hover:text-indigo-600 transition" title="Editar Turma">
+                        <i class="fa-solid fa-pen-to-square text-base"></i>
+                    </button>
+
                     <button onclick="deletarTurma(${t.id})" class="p-2 text-slate-300 hover:text-red-500 transition">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
             </div>`;
+
+            setTimeout(() => {
+                const btnEditar = document.getElementById(`btn-editar-turma-${t.id}`);
+                if (btnEditar) btnEditar.onclick = () => abrirModalEditarTurma(t);
+            }, 50);
         });
-    } catch (e) { 
+    } catch (e) {
         console.error("Erro ao carregar turmas", e);
         container.innerHTML = '<p class="text-center text-red-500">Erro ao carregar turmas.</p>';
     }
@@ -383,6 +405,12 @@ async function abrirModalTurma() {
                 </div>
 
                 <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Link do Meet da Turma (Opcional)</label>
+                    <input id="t-meet-link" class="swal2-input-custom" placeholder="Ex: meet.google.com/abc-defg-hij">
+                    <p class="text-[9px] text-slate-400 font-medium mt-0.5">Se deixar em branco, o sistema gerará um link novo automaticamente.</p>
+                </div>
+
+                <div>
                     <label class="text-[10px] font-bold uppercase text-slate-400">Selecionar Alunos</label>
                     <div class="max-h-32 overflow-y-auto mt-2 space-y-1 p-1 border rounded-lg bg-white">
                         ${listaAlunosHTML || '<p class="text-[10px] text-slate-400 p-2">Nenhum aluno livre disponível.</p>'}
@@ -397,19 +425,19 @@ async function abrirModalTurma() {
             btnAdd.onclick = () => {
                 const diaSelect = document.getElementById('t-dia-add');
                 const horaInput = document.getElementById('t-hora-add');
-                
-                if(!horaInput.value) {
+
+                if (!horaInput.value) {
                     Toast.fire({ icon: 'warning', title: 'Informe a hora!' });
                     return;
                 }
-                
-                const novoHorario = { 
-                    dia: parseInt(diaSelect.value), 
-                    hora: horaInput.value 
+
+                const novoHorario = {
+                    dia: parseInt(diaSelect.value),
+                    hora: horaInput.value
                 };
 
                 horariosDestaTurma.push(novoHorario);
-                
+
                 // Atualiza a visualização
                 containerLista.innerHTML = horariosDestaTurma.map((h, i) => `
                     <div class="flex justify-between items-center bg-white p-2 rounded-lg border border-indigo-100 text-[10px] font-black text-indigo-600 shadow-sm animate-in fade-in zoom-in duration-200">
@@ -424,6 +452,7 @@ async function abrirModalTurma() {
         preConfirm: () => {
             const nome = document.getElementById('t-nome').value;
             const tipo = document.getElementById('t-tipo').value;
+            const meetLink = document.getElementById('t-meet-link').value.trim();
             const selecionados = Array.from(document.querySelectorAll('input[name="aluno-turma"]:checked')).map(el => Number(el.value));
 
             if (!nome || horariosDestaTurma.length === 0) {
@@ -433,12 +462,13 @@ async function abrirModalTurma() {
                 return Swal.showValidationMessage('Selecione pelo menos um aluno');
             }
 
-            return { 
+            return {
                 nome_turma: nome,
                 tipo: tipo,
                 duracao_minutos: document.getElementById('t-duracao').value,
                 horarios: horariosDestaTurma,
-                aluno_ids: selecionados 
+                aluno_ids: selecionados,
+                meet_link: meetLink || null
             };
         }
     });
@@ -447,12 +477,12 @@ async function abrirModalTurma() {
         try {
             const res = await fetchProtegido(`${API_URL}/turmas/`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formValues)
             });
-            if (res.ok) { 
-                carregarTurmas(); 
-                Toast.fire({icon:'success', title:'Turma e horários criados!'}); 
+            if (res.ok) {
+                carregarTurmas();
+                Toast.fire({ icon: 'success', title: 'Turma e horários criados!' });
             } else {
                 const erro = await res.json();
                 Swal.fire('Erro', erro.detail || 'Erro ao criar turma', 'error');
@@ -476,7 +506,7 @@ async function deletarTurma(id) {
     if (confirmar.isConfirmed) {
         const res = await fetchProtegido(`${API_URL}/turmas/${id}`, { method: 'DELETE' });
         if (res.ok) {
-            Toast.fire({icon: 'success', title: 'Turma removida'});
+            Toast.fire({ icon: 'success', title: 'Turma removida' });
             carregarTurmas();
         }
     }
@@ -492,17 +522,17 @@ async function carregarAgenda() {
             console.error("O servidor não retornou uma lista. Verifique o login.");
             return; // Para aqui e não tenta dar o forEach
         }
-        
+
         container.innerHTML = aulas.length ? '' : '<p class="col-span-full text-slate-400 py-10 text-center">Nenhuma aula agendada.</p>';
-        
+
         const agora = new Date();
 
         // Usamos o index (i) para identificar qual objeto da lista estamos clicando
         aulas.forEach((a, i) => {
             const dataAula = new Date(a.data_inicio);
             const podeDarPresenca = agora >= dataAula;
-            const dataFormatada = dataAula.toLocaleDateString('pt-BR', { 
-                weekday: 'short', day: '2-digit', month: 'long' 
+            const dataFormatada = dataAula.toLocaleDateString('pt-BR', {
+                weekday: 'short', day: '2-digit', month: 'long'
             });
 
             // Definimos a cor do status (usando o status do primeiro aluno como base)
@@ -535,9 +565,9 @@ async function carregarAgenda() {
                     <div class="flex items-center gap-3 ml-4">
                         <button id="btn-chamada-${i}"
                                 ${podeDarPresenca ? '' : 'disabled'}
-                                class="${podeDarPresenca 
-                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100' 
-                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'} 
+                                class="${podeDarPresenca
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'} 
                                     p-4 rounded-2xl transition-all active:scale-95 flex flex-col items-center gap-1"
                                 title="${podeDarPresenca ? 'Fazer Chamada' : 'Aguarde o horário da aula'}">
                             <i class="fa-solid fa-clipboard-user text-xl"></i>
@@ -555,9 +585,9 @@ async function carregarAgenda() {
             // Atribuímos o evento de clique após criar o HTML para evitar erro de aspas no JSON
             setTimeout(() => {
                 const btnCancel = document.getElementById(`btn-cancelar-${i}`);
-                if(btnCancel) btnCancel.onclick = () => cancelarAulaGrupo(a);
+                if (btnCancel) btnCancel.onclick = () => cancelarAulaGrupo(a);
                 const btn = document.getElementById(`btn-chamada-${i}`);
-                if(btn) btn.onclick = () => abrirChamadaRetroativa(a, false);
+                if (btn) btn.onclick = () => abrirChamadaRetroativa(a, false);
             }, 0);
         });
     } catch (e) { console.error("Erro na agenda", e); }
@@ -580,13 +610,13 @@ async function abrirChamadaRetroativaGrupo(nomeExibicao, alunosJSON) {
     try {
         // Converte a string de alunos de volta para objeto
         const alunos = typeof alunosJSON === 'string' ? JSON.parse(alunosJSON) : alunosJSON;
-        
+
         // Monta o objeto no formato que a Lógica Universal espera
         const dadosFormatados = {
             nome_exibicao: nomeExibicao,
             alunos: alunos
         };
-        
+
         await abrirLogicaUniversal(dadosFormatados, true);
     } catch (e) {
         console.error("Erro ao abrir chamada do histórico:", e);
@@ -608,14 +638,14 @@ async function abrirLogicaUniversal(dadosAgrupados, ehRetroativa) {
 
     const listaAlunos = dados.alunos;
     const base = listaAlunos[0];
-    
+
     // Pegamos o desempenho do banco (ex: "Bom", "Médio", "Ruim")
     const notaBanco = base.desempenho || "";
 
     const listaAlunosHtml = listaAlunos.map(al => {
         const idUnico = ehRetroativa ? al.historico_id : al.aula_id;
         const statusPresente = ehRetroativa ? al.status_presenca : (al.status === 'presente');
-        
+
         return `
             <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2">
                 <span class="font-bold text-slate-700 text-sm">${al.nome}</span>
@@ -697,7 +727,7 @@ async function abrirLogicaUniversal(dadosAgrupados, ehRetroativa) {
 }
 
 async function cancelarAula(id) {
-    if(confirm("Deseja cancelar esta aula?")) {
+    if (confirm("Deseja cancelar esta aula?")) {
         await fetchProtegido(`${API_URL}/aulas/${id}`, { method: 'DELETE' });
         carregarAgenda();
     }
@@ -708,12 +738,12 @@ async function cancelarAula(id) {
 function gerarCalendario() {
     const grid = document.getElementById('calendarioMensal');
     const labelMes = document.getElementById('mesAtualExtenso');
-    if(!grid) return;
+    if (!grid) return;
 
-    grid.innerHTML = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map(d => 
+    grid.innerHTML = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d =>
         `<div class="bg-slate-50 p-2 text-center text-[10px] font-black text-slate-400 uppercase">${d}</div>`
     ).join('');
-    
+
     const ano = dataAtualCalendario.getFullYear();
     const mes = dataAtualCalendario.getMonth();
     labelMes.innerText = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(dataAtualCalendario);
@@ -722,12 +752,12 @@ function gerarCalendario() {
     const ultimoDia = new Date(ano, mes + 1, 0).getDate();
 
     for (let i = 0; i < primeiroDia; i++) grid.innerHTML += `<div class="bg-slate-50/50 h-24 border border-slate-100/50"></div>`;
-    
+
     for (let dia = 1; dia <= ultimoDia; dia++) {
         const ehHoje = (new Date()).toDateString() === (new Date(ano, mes, dia)).toDateString();
         // ADICIONADO: id="dia-container-${dia}" para podermos inserir as aulas depois
         grid.innerHTML += `
-            <div onclick="selecionarDia(this, ${dia}, ${new Date(ano,mes,dia).getDay()})" 
+            <div onclick="selecionarDia(this, ${dia}, ${new Date(ano, mes, dia).getDay()})" 
                  class="bg-white h-24 p-1 border border-slate-100 hover:border-indigo-500 cursor-pointer transition-colors relative overflow-y-auto">
                 <span class="text-[10px] font-black ${ehHoje ? 'bg-indigo-600 text-white w-5 h-5 flex items-center justify-center rounded-full' : 'text-slate-300'}">
                     ${dia}
@@ -750,12 +780,12 @@ async function renderizarAulasNoCalendario(mesAtual, anoAtual) {
         sessoes.forEach(sessao => {
             // A data que vem do backend (sessao.data) costuma ser YYYY-MM-DD
             const dataAula = new Date(sessao.data + "T00:00:00"); // Força fuso local
-            
+
             // Verifica se a aula pertence ao mês e ano que o professor está vendo
             if (dataAula.getMonth() === mesAtual && dataAula.getFullYear() === anoAtual) {
                 const dia = dataAula.getDate();
                 const container = document.getElementById(`eventos-dia-${dia}`);
-                
+
                 if (container) {
                     // Adiciona uma pequena "pílula" visual para cada aula
                     const pill = document.createElement('div');
@@ -791,10 +821,10 @@ async function carregarGridSemanal() {
         const grade = await res.json();
         const container = document.getElementById('gridSemanal');
         container.innerHTML = '';
-        
+
         diasNome.forEach((nome, i) => {
             const turnos = grade.filter(g => g.dia_semana == i);
-            if(turnos.length) {
+            if (turnos.length) {
                 container.innerHTML += `
                     <div class="mb-4">
                         <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">${nome}</p>
@@ -809,7 +839,7 @@ async function carregarGridSemanal() {
                     </div>`;
             }
         });
-    } catch (e) {}
+    } catch (e) { }
 }
 
 async function deletarTurno(id) {
@@ -822,10 +852,10 @@ document.getElementById('formGrade').onsubmit = async (e) => {
     const dia = document.getElementById('diaSemanaOculto').value;
     const inicio = document.getElementById('inicioGrade').value;
     const fim = document.getElementById('fimGrade').value;
-    if(dia === "") return Toast.fire({icon:'warning', title:'Selecione um dia no calendário'});
-    
-    await fetchProtegido(`${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}`, {method: 'POST'});
-    Toast.fire({icon: 'success', title: 'Horário salvo!'});
+    if (dia === "") return Toast.fire({ icon: 'warning', title: 'Selecione um dia no calendário' });
+
+    await fetchProtegido(`${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}`, { method: 'POST' });
+    Toast.fire({ icon: 'success', title: 'Horário salvo!' });
     carregarTudoGrade();
 };
 
@@ -874,7 +904,7 @@ async function abrirModalEditarAluno(aluno) {
     if (formValues) {
         const res = await fetchProtegido(`${API_URL}/alunos/${aluno.id}`, {
             method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formValues)
         });
 
@@ -916,10 +946,10 @@ async function gerarAulasDoMes() {
 
     if (confirmacao.isConfirmed) {
         // Mostra o "carregando" (importante porque o Google Agenda demora uns segundos para responder)
-        Swal.fire({ 
-            title: 'Sincronizando com Google...', 
-            allowOutsideClick: false, 
-            didOpen: () => { Swal.showLoading(); } 
+        Swal.fire({
+            title: 'Sincronizando com Google...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
         });
 
         try {
@@ -928,7 +958,7 @@ async function gerarAulasDoMes() {
 
             if (res.ok) {
                 Swal.fire('Sucesso!', 'Histórico e Google Agenda atualizados para os próximos 30 dias!', 'success');
-                
+
                 // Recarrega as listas para as aulas novas aparecerem na tela
                 if (typeof carregarHistoricoGeral === "function") carregarHistoricoGeral();
                 if (typeof carregarAgenda === "function") carregarAgenda();
@@ -946,7 +976,7 @@ async function abrirModalAgendamentoAvulso() {
     const res = await fetchProtegido(`${API_URL}/alunos/`);
     const alunos = await res.json();
 
-    const optionsAlunos = alunos.map(al => 
+    const optionsAlunos = alunos.map(al =>
         `<option value="${al.id}">${al.nome} ${al.sobrenome || ''} (${al.tipo})</option>`
     ).join('');
 
@@ -990,7 +1020,7 @@ async function enviarAgendamentoAvulso(dados) {
 
         if (res.ok) {
             const resposta = await res.json();
-            
+
             // Verifica se o Google Calendar falhou (conforme mudamos no Python)
             if (resposta.google_sync === false) {
                 Swal.fire({
@@ -1002,7 +1032,7 @@ async function enviarAgendamentoAvulso(dados) {
             } else {
                 Toast.fire({ icon: 'success', title: 'Aula agendada com sucesso!' });
             }
-            
+
             carregarAgenda(); // Atualiza a lista de aulas
         } else {
             const erro = await res.json();
@@ -1037,20 +1067,20 @@ async function prepararAdicao(turmaId, tipoTurma, totalAlunos, limiteMax) {
 
     const area = document.getElementById(`area-adicao-${turmaId}`);
     const select = document.getElementById(`select-alunos-livres-${turmaId}`);
-    
+
     // Mostra a área
     area.classList.remove('hidden');
-    
+
     try {
         // Busca alunos que não estão em nenhuma turma
         const res = await fetchProtegido(`${API_URL}/alunos/`);
         const todosAlunos = await res.json();
-        
+
         // Filtra alunos que NÃO têm turma_id ou que o turma_id seja null
         const alunosLivres = todosAlunos.filter(a => !a.turma_id);
 
         select.innerHTML = '<option value="">Selecione um aluno...</option>';
-        
+
         if (alunosLivres.length === 0) {
             select.innerHTML = '<option value="">Nenhum aluno livre encontrado</option>';
             return;
@@ -1083,7 +1113,7 @@ async function confirmarAdicao(turmaId) {
         if (res.ok) {
             await Swal.fire("Sucesso!", "Aluno adicionado.", "success");
             // Em vez de carregar tudo, vamos apenas recarregar a página para limpar o estado
-            window.location.reload(); 
+            window.location.reload();
         } else {
             const erro = await res.json();
             Swal.fire("Erro", erro.detail || "Falha ao adicionar", "error");
@@ -1116,16 +1146,16 @@ async function verHistorico(alunoId, alunoNome) {
                         </thead>
                         <tbody>
                             ${dados.map(h => {
-                                // Lógica de cores para a Nota
-                                const corNota = h.desempenho === 'Bom' ? 'text-green-600' : 
-                                               (h.desempenho === 'Médio' ? 'text-yellow-600' : 
-                                               (h.desempenho === 'Ruim' ? 'text-red-600' : 'text-blue-600'));
-                                
-                                // Lógica de cores para o Status (ajustado para minúsculo/maiúsculo)
-                                const statusBaixa = h.status.toLowerCase();
-                                const classeStatus = statusBaixa === 'presente' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+                // Lógica de cores para a Nota
+                const corNota = h.desempenho === 'Bom' ? 'text-green-600' :
+                    (h.desempenho === 'Médio' ? 'text-yellow-600' :
+                        (h.desempenho === 'Ruim' ? 'text-red-600' : 'text-blue-600'));
 
-                                return `
+                // Lógica de cores para o Status (ajustado para minúsculo/maiúsculo)
+                const statusBaixa = h.status.toLowerCase();
+                const classeStatus = statusBaixa === 'presente' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+
+                return `
                                 <tr class="border-b hover:bg-slate-50 transition-colors">
                                     <td class="p-2 font-medium text-slate-700">${new Date(h.data_inicio).toLocaleDateString('pt-BR')}</td>
                                     <td class="p-2 text-center">
@@ -1136,7 +1166,7 @@ async function verHistorico(alunoId, alunoNome) {
                                     <td class="p-2 text-center font-bold ${corNota}">${h.desempenho || '-'}</td>
                                     <td class="p-2 text-slate-500 text-[11px] max-w-[150px] truncate" title="${h.observacoes || ''}">${h.observacoes || '-'}</td>
                                 </tr>`;
-                            }).join('')}
+            }).join('')}
                         </tbody>
                     </table>
                 </div>`;
@@ -1171,10 +1201,10 @@ async function cancelarAulaGrupo(dados) {
         try {
             // 1. Tratamento rigoroso da data para o formato que o Python (fromisoformat) aceita
             // Removemos os milissegundos e o 'Z' se houver
-            let dataIso = typeof dados.data_inicio === 'string' 
-                ? dados.data_inicio 
+            let dataIso = typeof dados.data_inicio === 'string'
+                ? dados.data_inicio
                 : dados.data_inicio.toISOString();
-            
+
             dataIso = dataIso.split('.')[0]; // Pega apenas YYYY-MM-DDTHH:MM:SS
 
             const params = new URLSearchParams();
@@ -1203,7 +1233,7 @@ async function cancelarAulaGrupo(dados) {
             } else {
                 // 4. Tratamento amigável para o erro 422 do FastAPI
                 let msgErro = "Erro desconhecido";
-                
+
                 if (Array.isArray(respostaServidor.detail)) {
                     // O FastAPI manda uma lista de erros no 422
                     msgErro = respostaServidor.detail.map(e => `${e.loc[1]}: ${e.msg}`).join("<br>");
@@ -1240,7 +1270,7 @@ async function carregarEstatisticas() {
         // 2. Lógica de Cores Dinâmicas para a Taxa de Frequência
         // Removemos as cores antigas antes de aplicar a nova
         statTaxa.classList.remove('text-indigo-900', 'text-red-600', 'text-yellow-600', 'text-green-600');
-        
+
         if (d.taxa_presenca < 50) {
             statTaxa.classList.add('text-red-600');    // Crítico (Vermelho)
         } else if (d.taxa_presenca < 85) {
@@ -1253,11 +1283,11 @@ async function carregarEstatisticas() {
         const listaFaltosos = d.alunos_faltosos
             .map(a => `${a.nome} (${a.faltas})`)
             .join(', ');
-        
-        statFaltosos.innerText = d.alunos_faltosos.length > 0 
-            ? `Crítico: ${listaFaltosos}` 
+
+        statFaltosos.innerText = d.alunos_faltosos.length > 0
+            ? `Crítico: ${listaFaltosos}`
             : "Todos os alunos em dia!";
-            
+
     } catch (e) {
         console.error("Erro ao carregar stats", e);
     }
@@ -1277,25 +1307,25 @@ function alternarModoHistorico() {
         btn.classList.replace('text-white', 'text-slate-600');
     }
 
-    carregarHistoricoGeral(); 
+    carregarHistoricoGeral();
 }
 
 // Sua função principal atualizada
 async function carregarHistoricoGeral() {
     const container = document.getElementById('listaHistoricoGeral');
     if (!container) return;
-    
+
     container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-slate-400">Carregando...</td></tr>';
-    
+
     try {
         // AJUSTE: Construção dinâmica da URL com o parâmetro de finalizadas
-        const urlFinal = modoExibirFinalizadas 
-            ? `${API_URL}/aulas/admin/historico-geral?finalizadas=true` 
+        const urlFinal = modoExibirFinalizadas
+            ? `${API_URL}/aulas/admin/historico-geral?finalizadas=true`
             : `${API_URL}/aulas/admin/historico-geral`;
 
         const res = await fetchProtegido(urlFinal);
         const sessoes = await res.json();
-        
+
         container.innerHTML = "";
         if (!sessoes || sessoes.length === 0) {
             container.innerHTML = '<tr><td colspan="4" class="text-center py-10 text-slate-400">Nenhum registro encontrado.</td></tr>';
@@ -1305,7 +1335,7 @@ async function carregarHistoricoGeral() {
         sessoes.forEach((sessao) => {
             const dataFmt = new Date(sessao.data).toLocaleDateString('pt-BR');
             const totalAlunos = sessao.alunos.length;
-            
+
             // Lógica profissional: Verifica se todos os alunos daquela linha já tiveram a chamada feita
             const todosFinalizados = sessao.alunos.every(a => a.chamada_realizada === true);
 
@@ -1352,11 +1382,11 @@ function filtrarHistorico() {
         // Pega o texto da coluna Data (0) e Aluno (1)
         const colunaData = linhas[i].getElementsByTagName("td")[0];
         const colunaAluno = linhas[i].getElementsByTagName("td")[1];
-        
+
         if (colunaData || colunaAluno) {
             const textoData = colunaData.textContent || colunaData.innerText;
             const textoAluno = colunaAluno.textContent || colunaAluno.innerText;
-            
+
             // Se o que o usuário digitou estiver na data ou no nome do aluno, mostra a linha
             if (textoData.toLowerCase().indexOf(filtro) > -1 || textoAluno.toLowerCase().indexOf(filtro) > -1) {
                 linhas[i].style.display = "";
@@ -1419,10 +1449,77 @@ async function verRelatorio(alunoId, nomeAluno) {
     }
 }
 
+// ==========================================================
+// FUNÇÃO NOVA: MODAL PARA EDITAR TURMA EXISTENTE
+// ==========================================================
+async function abrirModalEditarTurma(turma) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Editar Turma',
+        html: `
+            <div class="text-left space-y-4">
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Nome do Grupo</label>
+                    <input id="ed-t-nome" class="swal2-input-custom" placeholder="Ex: Duo de Quinta" value="${turma.nome_turma}">
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Link do Meet da Turma</label>
+                    <input id="ed-t-meet-link" class="swal2-input-custom" placeholder="Ex: meet.google.com/abc-defg-hij" value="${turma.meet_link || ''}">
+                </div>
+                
+                <p class="text-[10px] text-amber-600 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 leading-tight">
+                    ⚠️ Nota: Mudar o link aqui atualizará a caixinha do painel para as próximas aulas que o professor acessar.
+                </p>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Salvar Alterações',
+        confirmButtonColor: '#4f46e5',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        preConfirm: () => {
+            const nome = document.getElementById('ed-t-nome').value.trim();
+            const meetLink = document.getElementById('ed-t-meet-link').value.trim();
+
+            if (!nome) {
+                return Swal.showValidationMessage('O nome da turma é obrigatório.');
+            }
+
+            return {
+                nome_turma: nome,
+                meet_link: meetLink || null
+            };
+        }
+    });
+
+    // Se o professor clicou em Salvar, envia para o backend FastAPI
+    if (formValues) {
+        try {
+            // Nota: Se você não tiver uma rota PUT específica, você precisará criá-la no seu turmas.py do FastAPI.
+            // Se preferir rodar apenas um teste local mandando os dados básicos:
+            const res = await fetchProtegido(`${API_URL}/turmas/${turma.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formValues)
+            });
+
+            if (res.ok) {
+                Toast.fire({ icon: 'success', title: 'Turma atualizada com sucesso!' });
+                carregarTurmas(); // Atualiza a listagem na tela
+            } else {
+                Swal.fire('Erro', 'Não foi possível atualizar os dados da turma no servidor.', 'error');
+            }
+        } catch (e) {
+            console.error("Erro na edição da turma:", e);
+            Swal.fire('Erro Técnico', 'Falha ao conectar com o backend.', 'error');
+        }
+    }
+}
+
 // Inicialização
 window.onload = () => {
     const token = localStorage.getItem('token_professor');
-    const estaNoPainel = document.getElementById('listaAgenda'); 
+    const estaNoPainel = document.getElementById('listaAgenda');
 
     // 1. Só tenta carregar dados se o elemento da agenda existir (ou seja, se estiver no painel)
     if (estaNoPainel) {
