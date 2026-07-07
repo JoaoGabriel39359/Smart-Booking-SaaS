@@ -1,7 +1,7 @@
 import os
-import pytz
 from dotenv import load_dotenv
 load_dotenv()
+import pytz
 from app.services.whatsapp import enviar_whatsapp
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -30,8 +30,8 @@ STATIC_PATH = os.path.join(CURRENT_DIR, "static")
 TEMPLATES_PATH = os.path.join(CURRENT_DIR, "templates")
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
-ADMIN_USER = os.getenv("ADMIN_USER", "OneLanguage")
-ADMIN_PASS_RAW = os.getenv("ADMIN_PASS", "8899jgvb")
+ADMIN_USER = os.getenv("ADMIN_USER")
+ADMIN_PASS_RAW = os.getenv("ADMIN_PASS")
 SENHA_MESTRA_HASH = pwd_context.hash(ADMIN_PASS_RAW)
 
 # --- AGENDADOR (SCHEDULER) ---
