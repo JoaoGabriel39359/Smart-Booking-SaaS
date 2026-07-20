@@ -18,17 +18,41 @@ def enviar_whatsapp(numero: str, mensagem: str):
     if len(numero_limpo) <= 11:
         if not numero_limpo.startswith("55"):
             numero_limpo = f"55{numero_limpo}"
+
+    # 3. Consulta o JID oficial no WhatsApp para evitar o bug do "Aguardando mensagem" no iOS
+    destinatario = numero_limpo
+    try:
+        url_check = f"{EVO_URL}/chat/whatsappNumbers/{EVO_INSTANCE}"
+        headers_check = {
+            "Content-Type": "application/json",
+            "apikey": EVO_KEY
+        }
+        payload_check = {
+            "numbers": [numero_limpo]
+        }
+        response_check = requests.post(url_check, headers=headers_check, json=payload_check, timeout=5)
+        if response_check.status_code in [200, 201]:
+            data = response_check.json()
+            if isinstance(data, list) and len(data) > 0:
+                contato = data[0]
+                if contato.get("exists") and contato.get("jid"):
+                    destinatario = contato.get("jid")
+                    print(f"🔍 JID oficial resolvido para {numero_limpo} -> {destinatario}")
+        else:
+            print(f"⚠️ Erro ao consultar whatsappNumbers ({response_check.status_code}): {response_check.text}")
+    except Exception as e:
+        print(f"⚠️ Falha ao conectar ao whatsappNumbers da Evolution: {e}")
     
     # A URL deve ser EXATAMENTE essa para a v1.8.3
     url = f"{EVO_URL}/message/sendText/{EVO_INSTANCE}"
 
     headers = {
         "Content-Type": "application/json",
-        "apikey": EVO_KEY # Aqui vai o 8899jgvb que está no seu Render
+        "apikey": EVO_KEY # Aqui vai o token do Render
     }
 
     payload = {
-        "number": numero_limpo, # A Evolution v1 cuida do @s.whatsapp.net sozinha
+        "number": destinatario, # Agora usamos o JID ou número exato verificado
         "options": {
             "delay": 1200,
             "presence": "composing"

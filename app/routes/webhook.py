@@ -2,7 +2,7 @@ from fastapi import APIRouter, Form, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
-from app.services.whatsapp import enviar_whatsapp # Sua função que usa Twilio
+from app.services.whatsapp import enviar_whatsapp 
 from datetime import datetime
 
 router = APIRouter(prefix="/webhook", tags=["Webhook"])
