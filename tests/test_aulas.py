@@ -216,3 +216,43 @@ def test_cancelar_aula_sem_reposicao(client, db_session, mock_whatsapp):
     telefones_chamados = [c[0] for c in chamadas]
     assert "5511888888888" in telefones_chamados
     assert "5522992011011" in telefones_chamados
+
+
+def test_cancelar_aula_sincroniza_historico_professor(client, db_session, mock_whatsapp):
+    token_aluno = str(uuid.uuid4())
+    aluno = models.Aluno(
+        nome="Sincronizado",
+        sobrenome="VIP",
+        telefone="5511777777777",
+        token_acesso=token_aluno,
+        creditos_reposicao=0,
+        tipo="VIP"
+    )
+    db_session.add(aluno)
+    db_session.commit()
+
+    dt_inicio = datetime.now() + timedelta(hours=5)
+    aula = models.Aula(
+        aluno_id=aluno.id,
+        data_inicio=dt_inicio,
+        data_fim=dt_inicio + timedelta(hours=1),
+        status="marcada"
+    )
+    historico = models.HistoricoAula(
+        aluno_id=aluno.id,
+        data_aula=dt_inicio,
+        status_presenca=False,
+        chamada_realizada=False,
+        observacao="Aula VIP Agendada"
+    )
+    db_session.add(aula)
+    db_session.add(historico)
+    db_session.commit()
+
+    response = client.post(f"/aulas/{aula.id}/cancelar/{token_aluno}")
+    assert response.status_code == 200
+
+    db_session.refresh(historico)
+    assert historico.chamada_realizada is True
+    assert historico.status_presenca is False
+    assert "Cancelada pelo Aluno" in historico.observacao

@@ -47,9 +47,9 @@ def mock_whatsapp(monkeypatch):
     monkeypatch.setattr(whatsapp, "enviar_whatsapp", mock)
     # E também nos locais onde foi importada diretamente para os namespaces dos módulos
     import app.routes.aulas
-    import app.main
+    import app.routes.portal
     import app.services.lembretes
     monkeypatch.setattr(app.routes.aulas, "enviar_whatsapp", mock)
-    monkeypatch.setattr(app.main, "enviar_whatsapp", mock)
+    monkeypatch.setattr(app.routes.portal, "enviar_whatsapp", mock)
     monkeypatch.setattr(app.services.lembretes, "enviar_whatsapp", mock)
     return mock

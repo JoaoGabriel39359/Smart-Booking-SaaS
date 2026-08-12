@@ -1,10 +1,8 @@
 import os
-import sys
 from datetime import datetime, timedelta
 
-sys.path.append(os.getcwd())
 from app.database import SessionLocal
-from app.models import Aula
+from app.models import Aula, StatusAula
 from app.services.whatsapp import enviar_whatsapp
 
 def enviar_lembretes_20min():
@@ -12,14 +10,13 @@ def enviar_lembretes_20min():
     try:
         agora = datetime.now()
         
-        # Janela de 10 minutos para garantir que não perderemos ninguém
         janela_inicio = agora + timedelta(minutes=15)
         janela_fim = agora + timedelta(minutes=25)
 
         proximas_aulas = db.query(Aula).filter(
             Aula.data_inicio >= janela_inicio,
             Aula.data_inicio <= janela_fim,
-            Aula.status == 'marcada',          
+            Aula.status.in_(["marcada", StatusAula.marcada]),
             Aula.lembrete_enviado == False     
         ).all()
 
@@ -27,13 +24,15 @@ def enviar_lembretes_20min():
             print(f"[{agora.strftime('%H:%M')}] Nenhuma aula nos próximos 20 min.")
 
         for aula in proximas_aulas:
+            if not aula.aluno:
+                continue
             msg = (
                 f"Ei {aula.aluno.nome}, sua aula começa em 20 minutos! 🧘‍♂️\n"
                 f"Já estamos te esperando. Até logo!"
             )
             try:
                 enviar_whatsapp(aula.aluno.telefone, msg)
-                aula.lembrete_enviado = True # Crucial: marca para não repetir
+                aula.lembrete_enviado = True
                 db.commit()
                 print(f"✅ Lembrete 20min enviado para: {aula.aluno.nome}")
             except Exception as e:

@@ -251,7 +251,7 @@ def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, d
         raise HTTPException(status_code=403, detail="Apenas plano VIP cancela pelo portal.")
 
     gera_reposicao = (aula.data_inicio - agora) >= timedelta(hours=3)
-    novo_status = "cancelado" if gera_reposicao else "ausente"
+    novo_status = StatusAula.cancelado if gera_reposicao else StatusAula.ausente
 
     if aula.google_event_id:
         try:
@@ -268,6 +268,17 @@ def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, d
         data_validade = agora + timedelta(days=30)
         aula.validade_reposicao = data_validade
         validade_formatada = data_validade.strftime('%d/%m/%Y')
+
+    # Sincronização com a tabela HistoricoAula para atualizar o cronograma do professor
+    historicos = db.query(HistoricoAula).filter(
+        HistoricoAula.aluno_id == aluno.id,
+        func.date(HistoricoAula.data_aula) == func.date(aula.data_inicio)
+    ).all()
+
+    for hist in historicos:
+        hist.chamada_realizada = True
+        hist.status_presenca = False
+        hist.observacao = f"Aula Cancelada pelo Aluno ({'Com reposição' if gera_reposicao else 'Sem reposição'})"
 
     db.commit()
 

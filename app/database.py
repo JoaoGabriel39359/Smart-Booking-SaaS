@@ -5,15 +5,15 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 DB_URL = os.getenv("DATABASE_URL")
 
 if not DB_URL:
-    # Este é o seu banco local para quando você estiver programando no VS Code
-    DB_URL = "postgresql://postgres:8899jgvb@localhost:5432/agenda_saas"
-else:
-    # Correção importante: O Render/SQLAlchemy às vezes exige 'postgresql://' 
-    # mas o link do Supabase pode vir como 'postgres://'
-    if DB_URL.startswith("postgres://"):
-        DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+    # Fallback seguro para desenvolvimento local SQLite caso DATABASE_URL não esteja definida
+    DB_URL = "sqlite:///./agenda_saas.db"
+elif DB_URL.startswith("postgres://"):
+    # Correção: Render/Supabase podem fornecer postgres:// mas SQLAlchemy exige postgresql://
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DB_URL)
+connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
+
+engine = create_engine(DB_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -25,12 +25,10 @@ def get_db():
         db.close()
 
 if __name__ == "__main__":
-    # Importamos os modelos aqui para o Base saber que eles existem
-    import models 
+    from app import models 
     
     print("Conectando ao banco e criando tabelas...")
     try:
-        # Cria as tabelas Aluno, Aula, Conversa e Turma
         Base.metadata.create_all(bind=engine)
         print("Sucesso! O esquema do banco (Alunos, Aulas, Turmas, Conversas) foi sincronizado.")
     except Exception as e:
