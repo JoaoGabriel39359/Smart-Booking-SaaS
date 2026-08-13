@@ -57,7 +57,8 @@ def gerar_aulas_da_semana(db=None):
                     fim_dt = inicio_dt + timedelta(minutes=duracao_aula)
                     google_id_atual = None
                     try:
-                        google_id_atual = criar_evento(inicio=inicio_dt, fim=fim_dt, nome_aluno=nome_para_google)
+                        g_res = criar_evento(inicio=inicio_dt, fim=fim_dt, nome_aluno=nome_para_google)
+                        google_id_atual = g_res[0] if isinstance(g_res, tuple) else g_res
                     except Exception as e:
                         print(f"⚠️ Erro Google: {e}")
 

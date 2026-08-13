@@ -101,14 +101,28 @@ def criar_evento(inicio: datetime, fim: datetime, nome_aluno: str, meet_link_exi
 # ==============================
 # DELETAR EVENTO (remover_evento_google)
 # ==============================
-def remover_evento_google(event_id: str):
+def remover_evento_google(event_id):
     """Deleta um evento do Google Calendar pelo ID"""
     try:
-        service = conectar_google() # Aqui estava o erro: chamava 'obter_servico'
-        service.events().delete(calendarId="primary", eventId=event_id).execute()
+        if not event_id:
+            return False
+
+        # Trata casos em que o ID veio como tupla/lista
+        if isinstance(event_id, (tuple, list)):
+            event_id = event_id[0]
+
+        # Trata casos em que o ID foi salvo como string de tupla, ex: "('abc123id', 'https://meet...')"
+        if isinstance(event_id, str) and (event_id.startswith("(") or "," in event_id):
+            limpo = event_id.strip("()[]'\" ").split(",")[0].strip("'\" ")
+            if limpo:
+                event_id = limpo
+
+        service = conectar_google()
+        service.events().delete(calendarId="primary", eventId=str(event_id)).execute()
+        print(f"✅ Evento {event_id} removido do Google Calendar com sucesso.")
         return True
     except Exception as e:
-        print(f"Erro ao deletar evento no Google: {e}")
+        print(f"❌ Erro ao deletar evento no Google ({event_id}): {e}")
         return False
 
 # Mantendo este apelido para não quebrar outros arquivos que usem o nome antigo

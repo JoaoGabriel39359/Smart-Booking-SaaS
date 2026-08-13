@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 from app import models
 from app.models import TipoAluno, StatusAula
-from cron_alertas import limpar_creditos_vencidos
+from app.jobs.cron_alertas import limpar_creditos_vencidos
 
 # Teste 1: Corrigido para bater com os nomes do seu Enum (VIP vs o outro)
 def test_bloqueio_cancelamento_nao_vip():
