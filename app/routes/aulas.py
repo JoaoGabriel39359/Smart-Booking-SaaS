@@ -106,8 +106,7 @@ def marcar_aula(aluno_id: int, data: str, hora: str, background_tasks: Backgroun
                 google_event_id=g_id,
                 eh_reposicao=eh_reposicao,
                 validade_reposicao=data_validade,
-                lembrete_enviado=False,
-                meet_link=meet_link 
+                lembrete_enviado=False
             )
             novas_aulas.append(nova)
 
@@ -163,7 +162,7 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
         except Exception as ge:
             print(f"DEBUG: Falha Google Calendar: {ge}")
 
-        nova_aula = Aula(aluno_id=aluno_id, data_inicio=inicio, data_fim=fim, status="marcada", google_event_id=google_event_id)
+        nova_aula = Aula(aluno_id=aluno_id, data_inicio=inicio, data_fim=fim, status=StatusAula.marcada, google_event_id=google_event_id)
         db.add(nova_aula)
         db.flush() 
 
@@ -172,8 +171,7 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
             data_aula=inicio,
             status_presenca=False,
             observacao="Aula Avulsa Agendada",
-            google_event_id=google_event_id,
-            meet_link=meet_link_avulso
+            google_event_id=google_event_id
         )
         db.add(novo_historico)
         db.commit()
