@@ -3,6 +3,7 @@ from app import models
 from app.database import SessionLocal 
 from app.models import Aluno, HorarioAula, HistoricoAula, Aula, StatusAula # Importamos Aula e StatusAula
 from app.services.google_calendar import criar_evento 
+from app.core.config import agora_br
 
 def gerar_aulas_da_semana(db=None):
     sessao_local = False
@@ -11,7 +12,7 @@ def gerar_aulas_da_semana(db=None):
         sessao_local = True
         
     try:
-        hoje = datetime.now()
+        hoje = agora_br()
         # Começamos a gerar a partir de hoje para não criar aulas no passado
         inicio_semana = hoje - timedelta(days=hoje.weekday())
         horarios = db.query(HorarioAula).all()
@@ -46,23 +47,33 @@ def gerar_aulas_da_semana(db=None):
 
                 if not alunos_afetados: continue
 
-                # --- TRAVA DE DUPLICIDADE (Olha para a tabela Aula) ---
-                primeiro_aluno = alunos_afetados[0]
-                aula_existente = db.query(Aula).filter(
-                    Aula.aluno_id == primeiro_aluno.id,
+                # --- TRAVA DE DUPLICIDADE (por ALUNO, nao apenas pelo primeiro da turma) ---
+                # Antes olhavamos so alunos_afetados[0]: se ele ja tinha a aula, os alunos
+                # recem-adicionados na turma NUNCA recebiam agendamento.
+                ids_afetados = [a.id for a in alunos_afetados]
+                aulas_existentes = db.query(Aula).filter(
+                    Aula.aluno_id.in_(ids_afetados),
                     Aula.data_inicio == inicio_dt
-                ).first()
+                ).all()
+                ids_com_aula = {a.aluno_id for a in aulas_existentes}
+                alunos_faltantes = [a for a in alunos_afetados if a.id not in ids_com_aula]
 
-                if not aula_existente:
+                if alunos_faltantes:
                     fim_dt = inicio_dt + timedelta(minutes=duracao_aula)
-                    google_id_atual = None
-                    try:
-                        g_res = criar_evento(inicio=inicio_dt, fim=fim_dt, nome_aluno=nome_para_google)
-                        google_id_atual = g_res[0] if isinstance(g_res, tuple) else g_res
-                    except Exception as e:
-                        print(f"⚠️ Erro Google: {e}")
 
-                    for aluno in alunos_afetados:
+                    # Reaproveita o evento do Google que a turma ja tem neste horario,
+                    # em vez de criar um evento duplicado no calendario.
+                    google_id_atual = next(
+                        (a.google_event_id for a in aulas_existentes if a.google_event_id), None
+                    )
+                    if not google_id_atual:
+                        try:
+                            g_res = criar_evento(inicio=inicio_dt, fim=fim_dt, nome_aluno=nome_para_google)
+                            google_id_atual = g_res[0] if isinstance(g_res, tuple) else g_res
+                        except Exception as e:
+                            print(f"⚠️ Erro Google: {e}")
+
+                    for aluno in alunos_faltantes:
                         # 1. SALVA NA AGENDA (Para o Professor e Portal verem)
                         nova_agenda = Aula(
                             aluno_id=aluno.id,
@@ -73,11 +84,13 @@ def gerar_aulas_da_semana(db=None):
                             google_event_id=google_id_atual
                         )
                         db.add(nova_agenda)
+                        db.flush()
 
                         # 2. SALVA NO HISTÓRICO (Para a chamada pedagógica)
                         nova_hist = HistoricoAula(
+                            aula_id=nova_agenda.id,
                             aluno_id=aluno.id,
-                            data_aula=inicio_dt.date(), # DATA + HORA
+                            data_aula=inicio_dt, # DATA + HORA
                             status_presenca=False,
                             chamada_realizada=False,
                             observacao=f"Agendamento Mensal - {duracao_aula}min",

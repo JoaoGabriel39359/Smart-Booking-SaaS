@@ -1,12 +1,21 @@
 import os
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from app.auth import criar_token_acesso, pwd_context
 
 router = APIRouter(tags=["autenticacao"])
 
+templates = Jinja2Templates(directory="app/frontend/templates")
+
+@router.get("/login", response_class=HTMLResponse)
+async def exibir_login(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
 ADMIN_USER = os.getenv("ADMIN_USER")
 ADMIN_PASS_RAW = os.getenv("ADMIN_PASS")
 SENHA_MESTRA_HASH = pwd_context.hash(ADMIN_PASS_RAW) if ADMIN_PASS_RAW else ""
+
 
 @router.post("/token")
 async def login(dados: dict):

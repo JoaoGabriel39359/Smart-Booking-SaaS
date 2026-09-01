@@ -1,6 +1,7 @@
 import os
 import pytz
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Request, Depends, Form, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -10,6 +11,8 @@ from app import models
 from app.database import get_db
 from app.services.google_calendar import criar_evento, remover_evento_google
 from app.services.whatsapp import enviar_whatsapp
+from app.services.agendamento import duracao_aula_minutos
+from app.core.config import BASE_URL, agora_br
 
 router = APIRouter(tags=["portal"])
 
@@ -41,14 +44,13 @@ async def painel():
 
 @router.get("/portal/{token}", response_class=HTMLResponse)
 async def pagina_portal_aluno(token: str, request: Request, db: Session = Depends(get_db)):
-    fuso_br = pytz.timezone('America/Sao_Paulo')
-    agora_br = datetime.now(fuso_br).replace(tzinfo=None)
+    agora = agora_br()
 
     aluno = db.query(models.Aluno).filter(models.Aluno.token_acesso == token).first()
     if not aluno:
         return HTMLResponse(content="Link de acesso inválido ou expirado.", status_code=404)
 
-    filtro_hora = agora_br - timedelta(hours=6)
+    filtro_hora = agora - timedelta(hours=6)
 
     aulas_aluno = db.query(models.Aula).filter(
         models.Aula.aluno_id == aluno.id,
@@ -79,6 +81,7 @@ async def reagendar_aula(
     background_tasks: BackgroundTasks,
     aula_id: int = Form(...), 
     nova_data: str = Form(...), 
+    grade_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
     aluno = db.query(models.Aluno).filter(models.Aluno.token_acesso == token).first()
@@ -96,7 +99,21 @@ async def reagendar_aula(
             print(f"❌ Erro na conversão de data: {nova_data} -> {e}")
             return f"Erro no formato da data enviada: {nova_data}"
 
-        data_fim_dt = data_dt + timedelta(hours=1)
+        data_fim_dt = data_dt + timedelta(minutes=duracao_aula_minutos(db, aluno))
+
+        professor_id = None
+        prof_nome = None
+        if grade_id:
+            turno_ref = db.query(models.GradeProfessor).filter(models.GradeProfessor.id == grade_id).first()
+            if turno_ref and turno_ref.professor_id:
+                professor_id = turno_ref.professor_id
+                prof_obj = db.query(models.Professor).filter(models.Professor.id == professor_id).first()
+                if prof_obj:
+                    prof_nome = prof_obj.nome
+        elif aluno.turma_id and aluno.turma and aluno.turma.professor_id:
+            professor_id = aluno.turma.professor_id
+            if aluno.turma.professor:
+                prof_nome = aluno.turma.professor.nome
 
         if aula_id == 0:
             if aluno.creditos_reposicao <= 0:
@@ -112,6 +129,7 @@ async def reagendar_aula(
 
             nova_aula = models.Aula(
                 aluno_id=aluno.id,
+                professor_id=professor_id,
                 data_inicio=data_dt,
                 data_fim=data_fim_dt, 
                 status=models.StatusAula.marcada,
@@ -142,18 +160,22 @@ async def reagendar_aula(
             except Exception as ge:
                 print(f"⚠️ Erro Google Calendar (Update): {ge}")
 
+            aula.professor_id = professor_id
             aula.data_inicio = data_dt
             aula.data_fim = data_fim_dt
             aula.status = models.StatusAula.marcada
             aula.lembrete_enviado = False
 
         db.commit()
-        link_portal = f"https://smart-booking-saas.onrender.com/portal/{token}"
+        link_portal = f"{BASE_URL}/portal/{token}"
         msg_reagendado = (
             f"Tudo certo, {aluno.nome}! ✅\n"
-            f"Sua aula foi remarcada para: *{data_dt.strftime('%d/%m às %H:%M')}*.\n\n"
-            f"Veja seus horários no portal:\n{link_portal}"
+            f"Sua aula foi remarcada para: *{data_dt.strftime('%d/%m às %H:%M')}*.\n"
         )
+        if prof_nome:
+            msg_reagendado += f"Reposição agendada com o professor {prof_nome}.\n"
+        msg_reagendado += f"\nVeja seus horários no portal:\n{link_portal}"
+
         background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg_reagendado)
 
         return RedirectResponse(url=f"/portal/{token}?sucesso=true", status_code=303)

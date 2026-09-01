@@ -8,16 +8,17 @@ from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.database import Base, engine
-from app.routes import alunos, aulas, webhook, turmas, auth, portal
+from app.routes import alunos, aulas, webhook, turmas, auth, portal, relatorios, professores
 from app.services import lembretes
 from app.services.lembretes import verificar_lembretes_background
 from app.services.gerar_agenda import gerar_aulas_da_semana
 
 # --- LÓGICA DE CAMINHOS ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_PATH = os.path.join(CURRENT_DIR, "static")
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
+STATIC_PATH = os.path.join(FRONTEND_PATH, "static")
+
 
 # --- AGENDADOR (SCHEDULER) ---
 scheduler = BackgroundScheduler()
@@ -42,6 +43,7 @@ app = FastAPI(title="Agenda SaaS", lifespan=lifespan)
 # --- MIDDLEWARE / STATIC ---
 if os.path.exists(STATIC_PATH):
     app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
+
 if os.path.exists(FRONTEND_PATH):
     app.mount("/frontend", StaticFiles(directory=FRONTEND_PATH), name="frontend")
 
@@ -53,3 +55,5 @@ app.include_router(alunos.router)
 app.include_router(aulas.router)
 app.include_router(webhook.router)
 app.include_router(lembretes.router)
+app.include_router(relatorios.router)
+app.include_router(professores.router)

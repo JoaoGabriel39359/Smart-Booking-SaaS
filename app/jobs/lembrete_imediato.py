@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import Aula, StatusAula
 from app.services.whatsapp import enviar_whatsapp
+from app.core.config import agora_br
 
 def enviar_lembretes_20min():
     db = SessionLocal()
     try:
-        agora = datetime.now()
+        agora = agora_br()
         
         janela_inicio = agora + timedelta(minutes=15)
         janela_fim = agora + timedelta(minutes=25)

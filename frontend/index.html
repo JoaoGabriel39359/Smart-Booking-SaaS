@@ -40,6 +40,8 @@
             <nav class="bg-slate-200 p-1.5 rounded-2xl flex space-x-1 shadow-inner overflow-x-auto">
                 <button onclick="trocarAba('agenda')" id="btnTabAgenda" class="tab-btn active">Agenda</button>
                 <button onclick="trocarAba('historico')" id="btnTabHistorico" class="tab-btn">Histórico</button>
+                <button onclick="trocarAba('frequencia')" id="btnTabFrequencia" class="tab-btn">Frequência</button>
+                <button onclick="trocarAba('professores')" id="btnTabProfessores" class="tab-btn">Professores</button>
                 <button onclick="trocarAba('alunos')" id="btnTabAlunos" class="tab-btn">Alunos</button>
                 <button onclick="trocarAba('turmas')" id="btnTabTurmas" class="tab-btn">Turmas</button>
                 <button onclick="trocarAba('grade')" id="btnTabGrade" class="tab-btn">Grade Base</button>
@@ -129,6 +131,12 @@
                                 <input type="time" id="inicioGrade" required class="input-field">
                                 <input type="time" id="fimGrade" required class="input-field">
                             </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <select id="professorGrade" class="input-field">
+                                    <option value="">Sem professor</option>
+                                </select>
+                                <input type="number" id="capacidadeGrade" min="1" max="10" value="1" placeholder="Vagas simultâneas" class="input-field">
+                            </div>
                             <button type="submit"
                                 class="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase text-[10px] tracking-widest">
                                 Salvar Turno
@@ -217,6 +225,79 @@
                         <tbody id="listaHistoricoGeral">
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <section id="abaFrequencia" class="aba-content hidden space-y-6">
+                <div class="flex justify-between items-center mb-2">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 italic uppercase tracking-tighter">Relatório de Frequência & Créditos</h2>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Acompanhamento pedagógico, cancelamentos e reposições</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Bloco 1: Tabela de Frequência por Aluno -->
+                    <div class="lg:col-span-12 card border-t-4 border-indigo-500">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-black text-slate-800 text-base">Frequência dos Alunos (Últimos 30 dias)</h3>
+                            <div class="relative w-64">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+                                <input type="text" id="buscaFrequencia" onkeyup="filtrarTabelaFrequencia()"
+                                    placeholder="Buscar aluno..."
+                                    class="w-full bg-slate-100 border-none rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse text-sm" id="tabelaFrequenciaAlunos">
+                                <thead>
+                                    <tr class="border-b bg-slate-50 text-slate-400 uppercase text-[10px] font-bold">
+                                        <th class="p-3">Aluno</th>
+                                        <th class="p-3 text-center">Total Aulas</th>
+                                        <th class="p-3 text-center">Presenças</th>
+                                        <th class="p-3 text-center">Faltas</th>
+                                        <th class="p-3 text-center">Cancelamentos</th>
+                                        <th class="p-3 text-center">Taxa Presença</th>
+                                        <th class="p-3 text-center">Última Aula</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="listaFrequenciaAlunos">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Bloco 2: Cancelamentos Recentes -->
+                    <div class="lg:col-span-6 card border-t-4 border-amber-500">
+                        <h3 class="font-black text-slate-800 text-base mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-xmark text-amber-500"></i> Cancelamentos (Últimos 7 dias)
+                        </h3>
+                        <div id="listaCancelamentosSemana" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <!-- Bloco 3: Créditos de Reposição Pendentes -->
+                    <div class="lg:col-span-6 card border-t-4 border-emerald-500">
+                        <h3 class="font-black text-slate-800 text-base mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-ticket text-emerald-500"></i> Créditos de Reposição Pendentes
+                        </h3>
+                        <div id="listaCreditosAlunos" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="abaProfessores" class="aba-content hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 italic uppercase tracking-tighter">Gestão de Professores</h2>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Cadastre e gerencie a equipe de professores</p>
+                    </div>
+                    <button onclick="abrirModalProfessor()"
+                        class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-user-plus"></i> Novo Professor
+                    </button>
+                </div>
+                <div class="card">
+                    <div id="listaProfessores" class="grid-layout"></div>
                 </div>
             </section>
         </main>

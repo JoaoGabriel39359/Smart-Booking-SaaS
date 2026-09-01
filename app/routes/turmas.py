@@ -4,12 +4,18 @@ from app.auth import verificar_token
 from app.services.google_calendar import criar_evento as criar_evento_google, remover_evento_google, criar_evento
 from app.services.gerar_agenda import gerar_aulas_da_semana
 from sqlalchemy.orm import Session                     
+from sqlalchemy import func, cast, Time
 from app.database import get_db          
-from app.models import Turma, Aluno, Aula, HorarioAula                
+from app.models import Turma, Aluno, Aula, HorarioAula, StatusAula, HistoricoAula
+from app.core.config import agora_br
+from app.routes.aulas import remover_aula_completa
 from datetime import date, datetime, timedelta
 import calendar
 
 router = APIRouter(prefix="/turmas", tags=["turmas"])
+
+LIMITES_POR_TIPO = {"VIP": 1, "DUO": 2, "TEAM": 6}
+DIAS_EXTENSO = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
 
 # ==========================================================
 # FUNÇÃO AUXILIAR (A INCREMENTAÇÃO)
@@ -77,9 +83,8 @@ def processar_geracao_aulas(db: Session, turma: Turma):
                         turma_id=turma.id,
                         data_inicio=data_inicio,
                         data_fim=data_fim,
-                        status="marcada",
+                        status=StatusAula.marcada,
                         google_event_id=google_id
-                        # Se você quiser guardar o link na tabela 'aulas' também, adicione a coluna lá e chame: meet_link=link_meet_da_turma
                     )
                     db.add(nova_aula)
                     aulas_criadas += 1
@@ -155,21 +160,144 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
 
 @router.put("/{turma_id}")
 def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+    """
+    Edicao completa da turma: nome, meet, tipo, duracao, dias/horarios e alunos.
+
+    Regra de ouro: NUNCA destruir credito de reposicao. Por isso a limpeza da agenda
+    remove apenas aulas FUTURAS com status 'marcada'. Aulas canceladas (que sustentam o
+    credito) e aulas ja realizadas (historico pedagogico) ficam intactas.
+    """
     turma = db.query(Turma).filter(Turma.id == turma_id).first()
     if not turma:
         raise HTTPException(status_code=404, detail="Turma não encontrada")
-    
+
+    agora = agora_br()
+
     try:
-        # Atualiza apenas os campos permitidos vindos do front-end
-        if "nome_turma" in dados:
-            turma.nome_turma = dados.get("nome_turma")
+        # ---------- 1. Campos simples ----------
+        if dados.get("nome_turma"):
+            turma.nome_turma = dados["nome_turma"]
         if "meet_link" in dados:
-            turma.meet_link = dados.get("meet_link")
-            
+            turma.meet_link = dados.get("meet_link") or None
+
+        tipo_novo = dados.get("tipo") or turma.tipo
+        limite_max = LIMITES_POR_TIPO.get(tipo_novo, 6)
+
+        # ---------- 2. Alunos (valida capacidade ANTES de alterar nada) ----------
+        ids_antigos = {a.id for a in turma.alunos}
+        alunos_alterados = "aluno_ids" in dados
+
+        if alunos_alterados:
+            ids_novos = {int(i) for i in (dados.get("aluno_ids") or [])}
+        else:
+            ids_novos = set(ids_antigos)
+
+        if len(ids_novos) > limite_max:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Turma do tipo {tipo_novo} aceita no máximo {limite_max} aluno(s). "
+                       f"Você selecionou {len(ids_novos)}."
+            )
+
+        turma.tipo = tipo_novo
+        turma.capacidade_maxima = limite_max
+        if dados.get("duracao_minutos"):
+            turma.duracao_minutos = int(dados["duracao_minutos"])
+
+        # ---------- 3. Dias e horarios ----------
+        horarios_alterados = "horarios" in dados
+        if horarios_alterados:
+            horarios_recebidos = dados.get("horarios") or []
+            if not horarios_recebidos:
+                raise HTTPException(status_code=400, detail="Informe ao menos um dia/horário para a turma.")
+
+            novos_horarios = []
+            for h in horarios_recebidos:
+                try:
+                    dia = int(h["dia"])
+                    hora = datetime.strptime(h["hora"], "%H:%M").time()
+                except (KeyError, TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail=f"Horário inválido: {h}")
+                if not 0 <= dia <= 6:
+                    raise HTTPException(status_code=400, detail=f"Dia da semana inválido: {dia}")
+                if (dia, hora) not in novos_horarios:
+                    novos_horarios.append((dia, hora))
+
+            novos_horarios.sort()
+            turma.dia_semana = ", ".join(DIAS_EXTENSO[d] for d, _ in novos_horarios)
+            turma.horario = ", ".join(hh.strftime("%H:%M") for _, hh in novos_horarios)
+
+            db.query(HorarioAula).filter(HorarioAula.turma_id == turma_id).delete(synchronize_session=False)
+            for dia, hora in novos_horarios:
+                db.add(HorarioAula(turma_id=turma_id, dia_da_semana=dia, horario=hora))
+
+        # ---------- 4. Aplica o vinculo dos alunos ----------
+        if alunos_alterados:
+            removidos = ids_antigos - ids_novos
+            if removidos:
+                db.query(Aluno).filter(Aluno.id.in_(removidos)).update(
+                    {"turma_id": None}, synchronize_session=False
+                )
+            if ids_novos:
+                for aluno in db.query(Aluno).filter(Aluno.id.in_(ids_novos)).all():
+                    aluno.turma_id = turma_id
+                    aluno.tipo = tipo_novo
+        elif "tipo" in dados:
+            for aluno in turma.alunos:
+                aluno.tipo = tipo_novo
+
+        db.flush()
+
+        # ---------- 5. Regera a agenda futura, se algo estrutural mudou ----------
+        precisa_regerar = (
+            horarios_alterados
+            or alunos_alterados
+            or "duracao_minutos" in dados
+            or "tipo" in dados
+        )
+
+        aulas_removidas = 0
+        if precisa_regerar:
+            # Pega tambem as aulas dos alunos que sairam: elas tem turma_id desta turma.
+            aulas_futuras = db.query(Aula).filter(
+                Aula.turma_id == turma_id,
+                Aula.data_inicio >= agora,
+                Aula.status == StatusAula.marcada
+            ).all()
+
+            for aula in aulas_futuras:
+                remover_aula_completa(db, aula, motivo="Edição de turma", apagar_google=True)
+                aulas_removidas += 1
+
         db.commit()
-        return {"status": "sucesso", "msg": f"Turma {turma.nome_turma} atualizada!"}
+
+        if precisa_regerar:
+            # gerar_aulas_da_semana faz o proprio commit e recria 4 semanas a frente
+            # respeitando duracao_minutos e a nova lista de alunos.
+            try:
+                gerar_aulas_da_semana(db)
+            except Exception as e_agenda:
+                print(f"⚠️ Turma salva, mas falhou ao regerar a agenda: {e_agenda}")
+                return {
+                    "status": "parcial",
+                    "msg": f"Turma {turma.nome_turma} atualizada, mas a agenda não pôde ser "
+                           f"regerada automaticamente. Use o botão 'Gerar Aulas do Mês'.",
+                    "aulas_removidas": aulas_removidas
+                }
+
+        return {
+            "status": "sucesso",
+            "msg": f"Turma {turma.nome_turma} atualizada!",
+            "aulas_removidas": aulas_removidas,
+            "agenda_regerada": precisa_regerar
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
+        print(f"ERRO AO EDITAR TURMA {turma_id}: {e}")
         raise HTTPException(status_code=400, detail=f"Erro ao salvar: {str(e)}")
 
 # --- GERAR MENSAL (VERSÃO UNIFICADA) ---
@@ -194,7 +322,13 @@ def listar_turmas(db: Session = Depends(get_db), usuario: str = Depends(verifica
             "dia_semana": t.dia_semana,
             "horario": t.horario,
             "capacidade_maxima": t.capacidade_maxima,
+            "duracao_minutos": t.duracao_minutos,
             "meet_link": t.meet_link,
+            # Horarios estruturados: o modal de edicao precisa deles para pre-preencher
+            "horarios": sorted(
+                [{"dia": h.dia_da_semana, "hora": h.horario.strftime("%H:%M")} for h in t.horarios],
+                key=lambda x: (x["dia"], x["hora"])
+            ),
             "alunos": [{"id": a.id, "nome": a.nome, "sobrenome": a.sobrenome} for a in t.alunos]
         })
     return resultado
@@ -207,48 +341,68 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
         if not turma:
             raise HTTPException(status_code=404, detail="Turma não encontrada")
 
-        # 1. Pegar IDs dos alunos para referências futuras
-        alunos = db.query(models.Aluno).filter(models.Aluno.turma_id == turma_id).all()
+        agora = agora_br()
+
+        # 1. Alunos e horários da turma
+        alunos = db.query(Aluno).filter(Aluno.turma_id == turma_id).all()
         alunos_ids = [a.id for a in alunos]
+        horarios_turma = db.query(HorarioAula).filter(HorarioAula.turma_id == turma_id).all()
 
-        # 2. Coletar e remover eventos do Google Agenda (de ambas as tabelas)
-        # Buscamos IDs tanto da tabela Aula quanto da HistoricoAula
-        eventos_agenda = db.query(models.Aula.google_event_id).filter(models.Aula.turma_id == turma_id).all()
-        eventos_hist = db.query(models.HistoricoAula.google_event_id).filter(models.HistoricoAula.aluno_id.in_(alunos_ids)).all() if alunos_ids else []
-        
-        # Unificamos os IDs únicos para não tentar deletar o mesmo evento duas vezes
-        todos_g_ids = set([e[0] for e in eventos_agenda if e[0]] + [e[0] for e in eventos_hist if e[0]])
+        # 2. Coletar Aulas da turma e Aulas órfãs (turma_id=NULL) dos mesmos alunos nos mesmos horários/dias da turma
+        aulas_para_remover = []
+        if alunos_ids:
+            aulas_turma = db.query(Aula).filter(Aula.turma_id == turma_id).all()
+            aulas_para_remover.extend(aulas_turma)
 
-        for g_id in todos_g_ids:
-            try:
-                remover_evento_google(g_id)
-            except Exception as e:
-                print(f"Aviso Google (pode ignorar): {e}")
+            if horarios_turma:
+                for h in horarios_turma:
+                    aulas_orfas = db.query(Aula).filter(
+                        Aula.aluno_id.in_(alunos_ids),
+                        Aula.turma_id == None,
+                        func.extract('dow', Aula.data_inicio) == (h.dia_da_semana + 1) % 7,
+                        func.cast(Aula.data_inicio, Time) == h.horario
+                    ).all()
+                    aulas_para_remover.extend(aulas_orfas)
 
-        # 3. LIMPEZA NO BANCO DE DADOS (A ordem aqui é CRÍTICA)
-        
-        # Passo A: Apagar as Aulas da Agenda (Tabela 'aulas') - RESOLVE O ERRO DA FK
-        db.query(models.Aula).filter(models.Aula.turma_id == turma_id).delete(synchronize_session=False)
+        aulas_unicas = list({a.id: a for a in aulas_para_remover}.values())
 
-        # Passo B: Limpar Horários Semanais (Tabela 'horarios_aula')
-        db.query(models.HorarioAula).filter(models.HorarioAula.turma_id == turma_id).delete(synchronize_session=False)
+        # 3. Processar remoção de aulas preservando créditos e histórico pedagógico
+        for aula in aulas_unicas:
+            is_cancelada_com_credito = (
+                aula.status == StatusAula.cancelado and 
+                aula.validade_reposicao is not None and 
+                aula.validade_reposicao >= agora
+            )
+            if is_cancelada_com_credito:
+                # Preserva a Aula cancelada para não destruir o crédito do aluno, apenas remove vínculo com a turma
+                aula.turma_id = None
+                continue
+
+            remover_aula_completa(db, aula, apagar_google=True)
 
         if alunos_ids:
-            # Passo C: Apagar histórico dos alunos
-            db.query(models.HistoricoAula).filter(models.HistoricoAula.aluno_id.in_(alunos_ids)).delete(synchronize_session=False)
-            
-            # Passo D: Desvincular alunos da turma (setar NULL)
-            db.query(models.Aluno).filter(models.Aluno.id.in_(alunos_ids)).update({"turma_id": None}, synchronize_session=False)
+            # Preserva o histórico pedagógico (aulas já realizadas). Apaga apenas registros não realizados de aulas FUTURAS.
+            db.query(HistoricoAula).filter(
+                HistoricoAula.aluno_id.in_(alunos_ids),
+                HistoricoAula.chamada_realizada == False,
+                HistoricoAula.data_aula >= agora
+            ).delete(synchronize_session=False)
 
-        # Passo E: Finalmente, apagar a Turma
+            # Desvincula alunos da turma (turma_id = NULL)
+            db.query(Aluno).filter(Aluno.id.in_(alunos_ids)).update({"turma_id": None}, synchronize_session=False)
+
+        # Limpar Horários Semanais
+        db.query(HorarioAula).filter(HorarioAula.turma_id == turma_id).delete(synchronize_session=False)
+
+        # Apagar a Turma
         db.delete(turma)
-        
-        db.commit() 
-        return {"msg": "Turma e todos os agendamentos deletados com sucesso!"}
+
+        db.commit()
+        return {"msg": "Turma e agendamentos deletados com sucesso!"}
 
     except Exception as e:
         db.rollback()
-        print(f"ERRO AO DELETAR NO RENDER: {str(e)}")
+        print(f"ERRO AO DELETAR TURMA: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao deletar: {str(e)}")
 
 # --- ADICIONAR ALUNO ---

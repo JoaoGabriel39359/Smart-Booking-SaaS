@@ -16,6 +16,18 @@ class StatusAula(enum.Enum):
     ausente = "Ausente"
     cancelado = "Cancelado"
 
+class Professor(Base):
+    __tablename__ = "professores"
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, nullable=False)
+    telefone = Column(String, nullable=True)
+    cor = Column(String, nullable=True)
+    ativo = Column(Boolean, default=True)
+
+    turnos = relationship("GradeProfessor", back_populates="professor")
+    aulas = relationship("Aula", back_populates="professor")
+    turmas = relationship("Turma", back_populates="professor")
+
 class Aluno(Base):
     __tablename__ = "alunos"
     id = Column(Integer, primary_key=True, index=True)
@@ -44,14 +56,13 @@ class Aula(Base):
     __tablename__ = "aulas"
     id = Column(Integer, primary_key=True)
     aluno_id = Column(Integer, ForeignKey("alunos.id"))
-    
-    # ADICIONE ESTA LINHA:
     turma_id = Column(Integer, ForeignKey("turmas.id"), nullable=True) 
+    professor_id = Column(Integer, ForeignKey("professores.id"), nullable=True, index=True)
     
     lembrete_enviado = Column(Boolean, default=False)
     lembrete_10h_enviado = Column(Boolean, default=False)
     data_inicio = Column(DateTime)
-    data_fim = Column(DateTime, nullable=True) # Deixei como nullable caso o gerador não envie
+    data_fim = Column(DateTime, nullable=True)
     status = Column(Enum(StatusAula), default=StatusAula.marcada)
     desempenho = Column(String, nullable=True)
     tipo = Column(String, nullable=True)
@@ -63,27 +74,25 @@ class Aula(Base):
     google_event_id = Column(String, nullable=True)
 
     aluno = relationship("Aluno", back_populates="aulas")
-    # OPCIONAL: Adicionar o relacionamento inverso para facilitar consultas
     turma = relationship("Turma")
-    validade_reposicao = Column(DateTime, nullable=True)
+    professor = relationship("Professor", back_populates="aulas")
+    historicos = relationship("HistoricoAula", back_populates="aula", cascade="all, delete-orphan")
 
 class Turma(Base):
     __tablename__ = "turmas"
     id = Column(Integer, primary_key=True, index=True)
-    nome_turma = Column(String, nullable=False) # Use nome_turma para bater com seu JS
+    nome_turma = Column(String, nullable=False)
     tipo = Column(String, default="TEAM")       # VIP, DUO, TEAM
-    dia_semana = Column(String, nullable=True) # Ex: "Quinta"
-    horario = Column(String, nullable=True)    # Ex: "21:00"
-    
-    # Opcional: Você pode manter capacidade_maxima, 
-    # mas o tipo (VIP/DUO) já dita isso na sua lógica JS
+    dia_semana = Column(String, nullable=True)
+    horario = Column(String, nullable=True)
     capacidade_maxima = Column(Integer, default=6)
     duracao_minutos = Column(Integer, default=60)
+    meet_link = Column(String, nullable=True)
+    professor_id = Column(Integer, ForeignKey("professores.id"), nullable=True)
 
-    # Relacionamento
     alunos = relationship("Aluno", back_populates="turma")
     horarios = relationship("HorarioAula", back_populates="turma")
-    meet_link = Column(String, nullable=True)
+    professor = relationship("Professor", back_populates="turmas")
 
 class GradeProfessor(Base):
     __tablename__ = "grade_professor"
@@ -92,6 +101,10 @@ class GradeProfessor(Base):
     hora_inicio = Column(String)
     hora_fim = Column(String)
     ativo = Column(Boolean, default=True)
+    professor_id = Column(Integer, ForeignKey("professores.id"), nullable=True, index=True)
+    capacidade = Column(Integer, default=1, nullable=False)
+
+    professor = relationship("Professor", back_populates="turnos")
 
 class Conversa(Base):
     __tablename__ = "conversas"
@@ -100,8 +113,7 @@ class Conversa(Base):
     etapa = Column(String, default="menu")
     data_escolhida = Column(String, nullable=True)
 
-# Modelo para os horários semanais (Múltiplas aulas)
-class HorarioAula(Base): # <--- Use Base aqui
+class HorarioAula(Base):
     __tablename__ = 'horarios_aula'
     id = Column(Integer, primary_key=True)
     aluno_id = Column(Integer, ForeignKey('alunos.id'))
@@ -112,10 +124,10 @@ class HorarioAula(Base): # <--- Use Base aqui
     aluno = relationship("Aluno", back_populates="horarios")
     turma = relationship("Turma", back_populates="horarios")
 
-# Modelo para o Histórico/Presença
-class HistoricoAula(Base): # <--- Use Base aqui
+class HistoricoAula(Base):
     __tablename__ = 'historico_aulas'
     id = Column(Integer, primary_key=True)
+    aula_id = Column(Integer, ForeignKey("aulas.id", ondelete="CASCADE"), nullable=True, index=True)
     aluno_id = Column(Integer, ForeignKey('alunos.id'))
     data_aula = Column(DateTime, nullable=False)
     status_presenca = Column(Boolean, default=False)
@@ -125,4 +137,4 @@ class HistoricoAula(Base): # <--- Use Base aqui
     chamada_realizada = Column(Boolean, default=False)
 
     aluno = relationship("Aluno", back_populates="historico")
-
+    aula = relationship("Aula", back_populates="historicos")

@@ -1,16 +1,15 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from app.database import SessionLocal
 from app.models import Aula, Aluno
-from app.services.lembretes import verificar_lembretes_background
 from app.services.whatsapp import enviar_whatsapp
-from apscheduler.schedulers.background import BackgroundScheduler
+from app.core.config import agora_br
 
 def verificar_lembretes_20min():
     db = SessionLocal()
     try:
         # 1. Definimos a janela de busca: aulas que começam daqui a 20 minutos
         # Usamos uma margem de 1 minuto para garantir que o job pegue a aula
-        agora = datetime.now()
+        agora = agora_br()
         alvo_inicio = agora + timedelta(minutes=20)
         alvo_fim = alvo_inicio + timedelta(minutes=1)
 
@@ -43,9 +42,3 @@ def verificar_lembretes_20min():
         print(f"Erro no processamento do scheduler: {e}")
     finally:
         db.close()
-
-# Configuração do agendador
-scheduler = BackgroundScheduler()
-# Rodar a cada 1 minuto para não perder nenhuma aula
-scheduler.add_job(verificar_lembretes_background, 'interval', minutes=1)
-scheduler.start()

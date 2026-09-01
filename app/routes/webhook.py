@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
 from app.services.whatsapp import enviar_whatsapp 
-from datetime import datetime
+from app.core.config import BASE_URL
 
 router = APIRouter(prefix="/webhook", tags=["Webhook"])
 
@@ -22,8 +22,7 @@ def whatsapp_webhook(background_tasks: BackgroundTasks, From: str = Form(...), B
         return {"status": "aluno_nao_encontrado"}
 
     # 3. Lógica de resposta única: Enviar o Link do Portal
-    # Aqui você usará o IP ou domínio onde seu sistema está rodando
-    link_portal = f"http://seu-ip-ou-dominio:8000/portal/{aluno.id}"
+    link_portal = f"{BASE_URL}/portal/{aluno.token_acesso}"
     
     resposta = (
         f"Olá, *{aluno.nome}*! 😊\n\n"

@@ -26,6 +26,9 @@ class AlunoEdit(BaseModel):
     endereco: Optional[str] = None
     cidade: Optional[str] = None
     estado: Optional[str] = None
+    limite_aulas_semana: Optional[int] = None
+    turma_id: Optional[int] = None
+    creditos_reposicao: Optional[int] = None
 
 class TurmaCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -40,3 +43,26 @@ class TurmaResponse(BaseModel):
     id: int
     nome_turma: str
     tipo: str
+
+
+class ProfessorBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    nome: str
+    telefone: Optional[str] = None
+    cor: Optional[str] = None
+    ativo: bool = True
+
+class ProfessorCreate(ProfessorBase):
+    pass
+
+class ProfessorEdit(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    cor: Optional[str] = None
+    ativo: Optional[bool] = None
+
+class ProfessorResponse(ProfessorBase):
+    id: int
+    total_turnos: int = 0
+    total_turmas: int = 0

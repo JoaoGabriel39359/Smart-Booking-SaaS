@@ -20,10 +20,12 @@ function trocarAba(aba) {
     document.getElementById(idBtn).classList.add('active');
 
     if (aba === 'agenda') carregarAgenda();
+    if (aba === 'historico') carregarHistoricoGeral();
+    if (aba === 'frequencia') carregarFrequencia();
+    if (aba === 'professores') carregarProfessores();
     if (aba === 'alunos') carregarAlunos();
     if (aba === 'turmas') carregarTurmas();
     if (aba === 'grade') carregarTudoGrade();
-    if (aba === 'historico') carregarHistoricoGeral();
 }
 
 async function fetchProtegido(url, opcoes = {}) {
@@ -79,6 +81,7 @@ async function carregarAlunos() {
                 'TEAM': 'bg-slate-100 text-slate-700 border-slate-200'
             };
             const classeCor = cores[aluno.tipo] || cores['TEAM'];
+            const linkPortal = aluno.token_acesso ? `${window.location.origin}/portal/${aluno.token_acesso}` : '';
 
             const card = `
             <div class="p-4 border rounded-xl bg-white flex justify-between items-center shadow-sm hover:shadow-md transition">
@@ -93,15 +96,24 @@ async function carregarAlunos() {
                         <i class="fa-solid fa-phone"></i> ${aluno.telefone || 'Sem número'}
                     </p>
                 </div>
-                <div class="flex gap-3 items-center">
-                    <button onclick="verRelatorio(${aluno.id}, '${aluno.nome}')" class="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Relatório">
-                        <i class="fa-solid fa-chart-line text-lg"></i>
+                <div class="flex gap-2 items-center">
+                    <button onclick="window.open('${linkPortal}', '_blank')" class="text-emerald-600 hover:text-emerald-800 transition-colors p-1" title="Abrir portal">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </button>
+                    <button onclick="copiarLinkPortal('${linkPortal}')" class="text-amber-500 hover:text-amber-700 transition-colors p-1" title="Copiar link do portal">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <button onclick="enviarPortalWhatsApp(${aluno.id}, '${aluno.nome}')" class="text-green-600 hover:text-green-800 transition-colors p-1" title="Enviar portal no WhatsApp">
+                        <i class="fa-brands fa-whatsapp text-base"></i>
+                    </button>
+                    <button onclick="verRelatorio(${aluno.id}, '${aluno.nome}')" class="text-blue-500 hover:text-blue-700 transition-colors p-1" title="Ver Relatório">
+                        <i class="fa-solid fa-chart-line"></i>
                     </button>
                     
-                    <button id="edit-${aluno.id}" class="text-indigo-500 hover:text-indigo-700">
+                    <button id="edit-${aluno.id}" class="text-indigo-500 hover:text-indigo-700 p-1">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
-                    <button onclick="deletarAluno(${aluno.id})" class="text-slate-300 hover:text-red-500">
+                    <button onclick="deletarAluno(${aluno.id})" class="text-slate-300 hover:text-red-500 p-1">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
@@ -117,6 +129,35 @@ async function carregarAlunos() {
         });
     } catch (e) {
         console.error("Erro ao carregar:", e);
+    }
+}
+
+function copiarLinkPortal(link) {
+    if (!link) {
+        Toast.fire({ icon: 'error', title: 'Aluno sem token gerado.' });
+        return;
+    }
+    navigator.clipboard.writeText(link);
+    Toast.fire({ icon: 'success', title: 'Link do portal copiado!' });
+}
+
+async function enviarPortalWhatsApp(alunoId, nomeAluno) {
+    const confirm = await Swal.fire({
+        title: 'Enviar Portal',
+        text: `Deseja enviar o link do portal para ${nomeAluno} pelo WhatsApp?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, enviar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (confirm.isConfirmed) {
+        const res = await fetchProtegido(`${API_URL}/alunos/${alunoId}/enviar-portal`, { method: 'POST' });
+        if (res.ok) {
+            Toast.fire({ icon: 'success', title: 'Link enviado por WhatsApp!' });
+        } else {
+            Toast.fire({ icon: 'error', title: 'Falha ao enviar portal' });
+        }
     }
 }
 
@@ -812,7 +853,23 @@ function selecionarDia(el, dia, diaSemana) {
 
 async function carregarTudoGrade() {
     gerarCalendario();
+    carregarSelectProfessoresGrade();
     carregarGridSemanal();
+}
+
+async function carregarSelectProfessoresGrade() {
+    const selectProf = document.getElementById('professorGrade');
+    if (!selectProf) return;
+    try {
+        const res = await fetchProtegido(`${API_URL}/professores/`);
+        if (res.ok) {
+            const professores = await res.json();
+            selectProf.innerHTML = '<option value="">Sem professor (Geral)</option>' +
+                professores.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        }
+    } catch (e) {
+        console.error("Erro ao carregar professores para a grade:", e);
+    }
 }
 
 async function carregarGridSemanal() {
@@ -828,14 +885,20 @@ async function carregarGridSemanal() {
                 container.innerHTML += `
                     <div class="mb-4">
                         <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">${nome}</p>
-                        ${turnos.map(t => `
+                        ${turnos.map(t => {
+                            const profStr = t.nome_professor ? ` | 👨‍🏫 ${t.nome_professor}` : '';
+                            const capStr = ` (${t.capacidade || 1} vaga(s))`;
+                            return `
                             <div class="text-[10px] bg-slate-50 p-2 rounded-lg mb-1 flex justify-between items-center border border-slate-100">
-                                <span class="font-bold text-slate-700">${t.hora_inicio} - ${t.hora_fim}</span>
+                                <div>
+                                    <span class="font-bold text-slate-700">${t.hora_inicio} - ${t.hora_fim}</span>
+                                    <span class="text-slate-500 font-semibold">${profStr}${capStr}</span>
+                                </div>
                                 <button onclick="deletarTurno(${t.id})" class="text-red-400 hover:text-red-600 transition">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             </div>
-                        `).join('')}
+                        `;}).join('')}
                     </div>`;
             }
         });
@@ -852,9 +915,17 @@ document.getElementById('formGrade').onsubmit = async (e) => {
     const dia = document.getElementById('diaSemanaOculto').value;
     const inicio = document.getElementById('inicioGrade').value;
     const fim = document.getElementById('fimGrade').value;
+    const profId = document.getElementById('professorGrade').value;
+    const cap = document.getElementById('capacidadeGrade').value || 1;
+
     if (dia === "") return Toast.fire({ icon: 'warning', title: 'Selecione um dia no calendário' });
 
-    await fetchProtegido(`${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}`, { method: 'POST' });
+    let url = `${API_URL}/aulas/configurar-grade?dia=${dia}&inicio=${inicio}&fim=${fim}&capacidade=${cap}`;
+    if (profId) {
+        url += `&professor_id=${profId}`;
+    }
+
+    await fetchProtegido(url, { method: 'POST' });
     Toast.fire({ icon: 'success', title: 'Horário salvo!' });
     carregarTudoGrade();
 };
@@ -865,20 +936,61 @@ function mudarMes(d) {
 }
 
 async function abrirModalEditarAluno(aluno) {
+    let turmas = [];
+    try {
+        const resTurmas = await fetchProtegido(`${API_URL}/turmas/`);
+        if (resTurmas.ok) {
+            turmas = await resTurmas.json();
+        }
+    } catch (e) {
+        console.error("Erro ao carregar turmas no modal de edição:", e);
+    }
+
+    const turmasOptions = turmas.map(t => `
+        <option value="${t.id}" ${aluno.turma_id === t.id ? 'selected' : ''}>
+            ${t.nome_turma} (${t.tipo})
+        </option>
+    `).join('');
+
     const { value: formValues } = await Swal.fire({
         title: 'Editar Aluno',
         html: `
-            <div class="space-y-2">
+            <div class="space-y-2 text-left">
                 <input id="ed-nome" class="swal2-input-custom" placeholder="Nome" value="${aluno.nome}">
                 <input id="ed-sobrenome" class="swal2-input-custom" placeholder="Sobrenome" value="${aluno.sobrenome || ''}">
                 <input id="ed-telefone" class="swal2-input-custom" placeholder="Telefone" value="${aluno.telefone}">
                 <input id="ed-email" class="swal2-input-custom" placeholder="E-mail" value="${aluno.email}">
-                <select id="ed-tipo" class="swal2-input-custom">
-                    <option value="VIP" ${aluno.tipo === 'VIP' ? 'selected' : ''}>VIP</option>
-                    <option value="DUO" ${aluno.tipo === 'DUO' ? 'selected' : ''}>DUO</option>
-                    <option value="TEAM" ${aluno.tipo === 'TEAM' ? 'selected' : ''}>TEAM</option>
-                </select>
-                <hr class="my-4">
+                
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Plano</label>
+                        <select id="ed-tipo" class="swal2-input-custom">
+                            <option value="VIP" ${aluno.tipo === 'VIP' ? 'selected' : ''}>VIP</option>
+                            <option value="DUO" ${aluno.tipo === 'DUO' ? 'selected' : ''}>DUO</option>
+                            <option value="TEAM" ${aluno.tipo === 'TEAM' ? 'selected' : ''}>TEAM</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Turma</label>
+                        <select id="ed-turma" class="swal2-input-custom">
+                            <option value="">Sem turma</option>
+                            ${turmasOptions}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Aulas por semana</label>
+                        <input id="ed-limite" type="number" min="1" max="10" class="swal2-input-custom" value="${aluno.limite_aulas_semana || 2}">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Créditos Reposição</label>
+                        <input id="ed-creditos" type="number" min="0" class="swal2-input-custom" value="${aluno.creditos_reposicao || 0}">
+                    </div>
+                </div>
+
+                <hr class="my-3 border-slate-100">
                 <input id="ed-endereco" class="swal2-input-custom" placeholder="Endereço" value="${aluno.endereco || ''}">
                 <div class="grid grid-cols-2 gap-2">
                     <input id="ed-cidade" class="swal2-input-custom" placeholder="Cidade" value="${aluno.cidade || ''}">
@@ -888,16 +1000,23 @@ async function abrirModalEditarAluno(aluno) {
         `,
         focusConfirm: false,
         preConfirm: () => {
+            const turmaVal = document.getElementById('ed-turma').value;
+            const limiteVal = document.getElementById('ed-limite').value;
+            const creditosVal = document.getElementById('ed-creditos').value;
+
             return {
                 nome: document.getElementById('ed-nome').value,
                 sobrenome: document.getElementById('ed-sobrenome').value,
                 telefone: document.getElementById('ed-telefone').value,
                 email: document.getElementById('ed-email').value,
                 tipo: document.getElementById('ed-tipo').value,
+                turma_id: turmaVal ? parseInt(turmaVal) : null,
+                limite_aulas_semana: limiteVal !== "" ? parseInt(limiteVal) : 2,
+                creditos_reposicao: creditosVal !== "" ? parseInt(creditosVal) : 0,
                 endereco: document.getElementById('ed-endereco').value || null,
                 cidade: document.getElementById('ed-cidade').value || null,
                 estado: document.getElementById('ed-estado').value || null
-            }
+            };
         }
     });
 
@@ -912,7 +1031,8 @@ async function abrirModalEditarAluno(aluno) {
             Toast.fire({ icon: 'success', title: 'Aluno atualizado!' });
             carregarAlunos();
         } else {
-            Swal.fire('Erro', 'Não foi possível atualizar o aluno.', 'error');
+            const erroData = await res.json();
+            Swal.fire('Erro', erroData.detail || 'Não foi possível atualizar o aluno.', 'error');
         }
     }
 }
@@ -1453,22 +1573,108 @@ async function verRelatorio(alunoId, nomeAluno) {
 // FUNÇÃO NOVA: MODAL PARA EDITAR TURMA EXISTENTE
 // ==========================================================
 async function abrirModalEditarTurma(turma) {
+    // Carrega alunos para permitir trocar a composição da turma
+    let todosAlunos = [];
+    try {
+        const resAlunos = await fetchProtegido(`${API_URL}/alunos/`);
+        todosAlunos = await resAlunos.json();
+    } catch (e) {
+        console.error("Erro ao carregar alunos:", e);
+    }
+
+    const idsDaTurma = (turma.alunos || []).map(a => a.id);
+    // Só faz sentido oferecer quem está livre ou já é desta turma
+    const alunosDisponiveis = todosAlunos.filter(a => !a.turma_id || idsDaTurma.includes(a.id));
+
+    // Estado local dos horários (dia 0=Segunda ... 6=Domingo)
+    let horariosEdit = (turma.horarios || []).map(h => ({ dia: Number(h.dia), hora: h.hora }));
+
+    const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+    const LIMITES = { VIP: 1, DUO: 2, TEAM: 6 };
+
+    const renderHorarios = () => {
+        const box = document.getElementById('ed-lista-horarios');
+        if (!box) return;
+        if (!horariosEdit.length) {
+            box.innerHTML = `<p class="text-[11px] text-slate-400 italic">Nenhum horário definido.</p>`;
+            return;
+        }
+        box.innerHTML = horariosEdit
+            .map((h, i) => `
+                <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                    <span class="text-xs font-bold text-slate-700">${DIAS[h.dia]} às ${h.hora}</span>
+                    <button type="button" data-idx="${i}" class="ed-rm-hora text-rose-500 font-black px-2 hover:text-rose-700">&times;</button>
+                </div>`)
+            .join('');
+        box.querySelectorAll('.ed-rm-hora').forEach(btn => {
+            btn.onclick = () => {
+                horariosEdit.splice(Number(btn.dataset.idx), 1);
+                renderHorarios();
+            };
+        });
+    };
+
     const { value: formValues } = await Swal.fire({
         title: 'Editar Turma',
+        width: 560,
         html: `
             <div class="text-left space-y-4">
                 <div>
                     <label class="text-[10px] font-bold uppercase text-slate-400">Nome do Grupo</label>
-                    <input id="ed-t-nome" class="swal2-input-custom" placeholder="Ex: Duo de Quinta" value="${turma.nome_turma}">
+                    <input id="ed-t-nome" class="swal2-input-custom" placeholder="Ex: Duo de Quinta" value="${turma.nome_turma || ''}">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Plano / Tipo</label>
+                        <select id="ed-t-tipo" class="swal2-input-custom">
+                            <option value="VIP" ${turma.tipo === 'VIP' ? 'selected' : ''}>VIP (1 aluno)</option>
+                            <option value="DUO" ${turma.tipo === 'DUO' ? 'selected' : ''}>DUO (2 alunos)</option>
+                            <option value="TEAM" ${turma.tipo === 'TEAM' ? 'selected' : ''}>TEAM (até 6)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Duração da Aula</label>
+                        <select id="ed-t-duracao" class="swal2-input-custom">
+                            <option value="60" ${Number(turma.duracao_minutos) === 60 ? 'selected' : ''}>1 hora</option>
+                            <option value="90" ${Number(turma.duracao_minutos) === 90 ? 'selected' : ''}>1h30</option>
+                            <option value="120" ${Number(turma.duracao_minutos) === 120 ? 'selected' : ''}>2 horas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Dias e Horários</label>
+                    <div class="flex gap-2 mb-2">
+                        <select id="ed-t-dia-add" class="text-xs p-2 rounded-lg border flex-1 outline-none">
+                            ${DIAS.map((d, i) => `<option value="${i}">${d}</option>`).join('')}
+                        </select>
+                        <input type="time" id="ed-t-hora-add" class="text-xs p-2 rounded-lg border w-24 outline-none">
+                        <button type="button" id="ed-btn-add-hora" class="bg-indigo-600 text-white px-4 rounded-lg font-black hover:bg-indigo-700 transition">+</button>
+                    </div>
+                    <div id="ed-lista-horarios" class="space-y-1"></div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Alunos da Turma</label>
+                    <div id="ed-t-alunos" class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
+                        ${alunosDisponiveis.length ? alunosDisponiveis.map(a => `
+                            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 px-1 py-0.5 cursor-pointer">
+                                <input type="checkbox" class="ed-chk-aluno" value="${a.id}" ${idsDaTurma.includes(a.id) ? 'checked' : ''}>
+                                ${a.nome} ${a.sobrenome || ''}
+                            </label>`).join('')
+                          : `<p class="text-[11px] text-slate-400 italic">Nenhum aluno disponível.</p>`}
+                    </div>
                 </div>
 
                 <div>
                     <label class="text-[10px] font-bold uppercase text-slate-400">Link do Meet da Turma</label>
                     <input id="ed-t-meet-link" class="swal2-input-custom" placeholder="Ex: meet.google.com/abc-defg-hij" value="${turma.meet_link || ''}">
                 </div>
-                
+
                 <p class="text-[10px] text-amber-600 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 leading-tight">
-                    ⚠️ Nota: Mudar o link aqui atualizará a caixinha do painel para as próximas aulas que o professor acessar.
+                    ⚠️ Ao mudar dias, horários, plano ou alunos, as aulas <b>futuras ainda não realizadas</b> desta turma
+                    são refeitas automaticamente. Créditos de reposição e histórico de aulas já dadas <b>não são perdidos</b>.
                 </p>
             </div>
         `,
@@ -1477,37 +1683,60 @@ async function abrirModalEditarTurma(turma) {
         confirmButtonColor: '#4f46e5',
         cancelButtonText: 'Cancelar',
         focusConfirm: false,
+        didOpen: () => {
+            renderHorarios();
+            document.getElementById('ed-btn-add-hora').onclick = () => {
+                const dia = Number(document.getElementById('ed-t-dia-add').value);
+                const hora = document.getElementById('ed-t-hora-add').value;
+                if (!hora) return;
+                if (horariosEdit.some(h => h.dia === dia && h.hora === hora)) return;
+                horariosEdit.push({ dia, hora });
+                horariosEdit.sort((a, b) => a.dia - b.dia || a.hora.localeCompare(b.hora));
+                renderHorarios();
+            };
+        },
         preConfirm: () => {
             const nome = document.getElementById('ed-t-nome').value.trim();
+            const tipo = document.getElementById('ed-t-tipo').value;
+            const duracao = Number(document.getElementById('ed-t-duracao').value);
             const meetLink = document.getElementById('ed-t-meet-link').value.trim();
+            const alunoIds = Array.from(document.querySelectorAll('.ed-chk-aluno:checked')).map(c => Number(c.value));
 
-            if (!nome) {
-                return Swal.showValidationMessage('O nome da turma é obrigatório.');
+            if (!nome) return Swal.showValidationMessage('O nome da turma é obrigatório.');
+            if (!horariosEdit.length) return Swal.showValidationMessage('Defina ao menos um dia e horário.');
+            const limite = LIMITES[tipo] || 6;
+            if (alunoIds.length > limite) {
+                return Swal.showValidationMessage(`Turma ${tipo} aceita no máximo ${limite} aluno(s).`);
             }
 
             return {
                 nome_turma: nome,
-                meet_link: meetLink || null
+                tipo: tipo,
+                duracao_minutos: duracao,
+                meet_link: meetLink || null,
+                horarios: horariosEdit,
+                aluno_ids: alunoIds
             };
         }
     });
 
-    // Se o professor clicou em Salvar, envia para o backend FastAPI
     if (formValues) {
         try {
-            // Nota: Se você não tiver uma rota PUT específica, você precisará criá-la no seu turmas.py do FastAPI.
-            // Se preferir rodar apenas um teste local mandando os dados básicos:
+            Swal.fire({ title: 'Salvando e refazendo a agenda...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             const res = await fetchProtegido(`${API_URL}/turmas/${turma.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formValues)
             });
+            const data = await res.json().catch(() => ({}));
 
             if (res.ok) {
-                Toast.fire({ icon: 'success', title: 'Turma atualizada com sucesso!' });
-                carregarTurmas(); // Atualiza a listagem na tela
+                Swal.close();
+                Toast.fire({ icon: 'success', title: data.msg || 'Turma atualizada!' });
+                carregarTurmas();
+                if (typeof carregarAgenda === 'function') carregarAgenda();
             } else {
-                Swal.fire('Erro', 'Não foi possível atualizar os dados da turma no servidor.', 'error');
+                Swal.fire('Erro', data.detail || 'Não foi possível atualizar a turma.', 'error');
             }
         } catch (e) {
             console.error("Erro na edição da turma:", e);
@@ -1541,4 +1770,266 @@ function fazerLogout() {
     localStorage.removeItem('token_professor');
     sessionStorage.clear();
     window.location.href = "/frontend/login.html";
+}
+
+// --- ABA FREQUÊNCIA & RELATÓRIOS ---
+async function carregarFrequencia() {
+    try {
+        const [resFreq, resCanc, resCred] = await Promise.all([
+            fetchProtegido(`${API_URL}/relatorios/frequencia?dias=30`),
+            fetchProtegido(`${API_URL}/relatorios/cancelamentos-semana`),
+            fetchProtegido(`${API_URL}/relatorios/creditos`)
+        ]);
+
+        const [freqDados, cancDados, credDados] = await Promise.all([
+            resFreq.json(),
+            resCanc.json(),
+            resCred.json()
+        ]);
+
+        renderizarTabelaFrequencia(freqDados);
+        renderizarCancelamentosSemana(cancDados);
+        renderizarCreditosAlunos(credDados);
+    } catch (e) {
+        console.error("Erro ao carregar relatórios de frequência:", e);
+    }
+}
+
+function renderizarTabelaFrequencia(dados) {
+    const tbody = document.getElementById('listaFrequenciaAlunos');
+    if (!tbody) return;
+
+    if (!Array.isArray(dados) || dados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-400">Nenhum dado de frequência encontrado nos últimos 30 dias.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = dados.map(item => {
+        let badgeCor = 'bg-green-100 text-green-700';
+        if (item.taxa_presenca < 75) badgeCor = 'bg-yellow-100 text-yellow-700';
+        if (item.taxa_presenca < 50) badgeCor = 'bg-red-100 text-red-700';
+
+        return `
+            <tr class="border-b hover:bg-slate-50 transition item-frequencia">
+                <td class="p-3 font-bold text-slate-800 col-nome-aluno">${item.nome}</td>
+                <td class="p-3 text-center font-semibold text-slate-600">${item.total_aulas}</td>
+                <td class="p-3 text-center font-bold text-emerald-600">${item.presencas}</td>
+                <td class="p-3 text-center font-bold text-rose-500">${item.faltas}</td>
+                <td class="p-3 text-center font-bold text-amber-500">${item.cancelamentos}</td>
+                <td class="p-3 text-center">
+                    <span class="px-2 py-1 rounded-md text-xs font-black ${badgeCor}">
+                        ${item.taxa_presenca}%
+                    </span>
+                </td>
+                <td class="p-3 text-center text-xs text-slate-500 font-medium">${item.ultima_aula}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderizarCancelamentosSemana(dados) {
+    const container = document.getElementById('listaCancelamentosSemana');
+    if (!container) return;
+
+    if (!Array.isArray(dados) || dados.length === 0) {
+        container.innerHTML = `<p class="text-center text-slate-400 py-6 text-xs">Nenhum cancelamento nos últimos 7 dias.</p>`;
+        return;
+    }
+
+    container.innerHTML = dados.map(item => `
+        <div class="p-3 bg-amber-50 rounded-xl border border-amber-100 flex justify-between items-center">
+            <div>
+                <p class="font-bold text-slate-800 text-sm">${item.nome}</p>
+                <p class="text-[11px] text-amber-800 font-semibold">
+                    <i class="fa-regular fa-clock mr-1"></i>${item.data_aula}
+                </p>
+            </div>
+            <div class="text-right">
+                ${item.gerou_credito ? `
+                    <span class="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md block">
+                        Crédito até ${item.validade_reposicao}
+                    </span>
+                ` : `
+                    <span class="text-[9px] font-black bg-rose-100 text-rose-700 px-2 py-1 rounded-md block">
+                        Sem crédito
+                    </span>
+                `}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderizarCreditosAlunos(dados) {
+    const container = document.getElementById('listaCreditosAlunos');
+    if (!container) return;
+
+    if (!Array.isArray(dados) || dados.length === 0) {
+        container.innerHTML = `<p class="text-center text-slate-400 py-6 text-xs">Nenhum aluno com créditos de reposição pendentes.</p>`;
+        return;
+    }
+
+    container.innerHTML = dados.map(item => `
+        <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex justify-between items-center">
+            <div>
+                <p class="font-bold text-slate-800 text-sm">${item.nome}</p>
+                <p class="text-[10px] text-emerald-700 font-semibold">
+                    <i class="fa-solid fa-ticket mr-1"></i> ${item.creditos_validos} crédito(s) | Vence em: ${item.validade_proxima}
+                </p>
+            </div>
+            <button onclick="enviarPortalWhatsApp(${item.aluno_id}, '${item.nome}')"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase px-3 py-2 rounded-lg transition flex items-center gap-1 shadow-sm">
+                <i class="fa-brands fa-whatsapp"></i> Cobrar reposição
+            </button>
+        </div>
+    `).join('');
+}
+
+function filtrarTabelaFrequencia() {
+    const termo = document.getElementById('buscaFrequencia').value.toLowerCase();
+    const linhas = document.querySelectorAll('.item-frequencia');
+
+    linhas.forEach(linha => {
+        const nome = linha.querySelector('.col-nome-aluno').innerText.toLowerCase();
+        if (nome.includes(termo)) {
+            linha.style.display = '';
+        } else {
+            linha.style.display = 'none';
+        }
+    });
+}
+
+// --- ABA PROFESSORES ---
+async function carregarProfessores() {
+    try {
+        const res = await fetchProtegido(`${API_URL}/professores/`);
+        if (!res.ok) return;
+        const professores = await res.json();
+        const container = document.getElementById('listaProfessores');
+        if (!container) return;
+
+        if (!Array.isArray(professores) || professores.length === 0) {
+            container.innerHTML = `<p class="text-center text-slate-400 py-6 text-xs col-span-full">Nenhum professor cadastrado.</p>`;
+            return;
+        }
+
+        container.innerHTML = professores.map(p => `
+            <div class="card border border-slate-100 p-5 rounded-2xl relative shadow-sm">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <h3 class="font-black text-slate-800 text-lg flex items-center gap-2">
+                            ${p.nome}
+                            ${p.cor ? `<span class="w-3 h-3 rounded-full inline-block" style="background-color: ${p.cor}"></span>` : ''}
+                        </h3>
+                        <p class="text-xs text-slate-400 font-semibold">${p.telefone || 'Sem telefone'}</p>
+                    </div>
+                    <span class="px-2 py-1 text-[10px] font-black uppercase rounded-md ${p.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                        ${p.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                </div>
+                <div class="flex gap-4 text-xs text-slate-600 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div><span class="font-bold block">${p.total_turnos}</span> <span class="text-[9px] uppercase text-slate-400">Turnos</span></div>
+                    <div><span class="font-bold block">${p.total_turmas}</span> <span class="text-[9px] uppercase text-slate-400">Turmas</span></div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick='abrirModalProfessor(${JSON.stringify(p)})'
+                            class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs transition">
+                        Editar
+                    </button>
+                    <button onclick="deletarProfessor(${p.id}, '${p.nome}')"
+                            class="px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold py-2 rounded-xl text-xs transition">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error("Erro ao carregar professores:", e);
+    }
+}
+
+async function abrirModalProfessor(prof = null) {
+    const isEdit = !!prof;
+    const { value: formValues } = await Swal.fire({
+        title: isEdit ? 'Editar Professor' : 'Novo Professor',
+        html: `
+            <div class="space-y-3 text-left">
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Nome</label>
+                    <input id="prof-nome" class="swal2-input-custom" placeholder="Nome Completo" value="${isEdit ? prof.nome : ''}">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase text-slate-400">Telefone (WhatsApp)</label>
+                    <input id="prof-telefone" class="swal2-input-custom" placeholder="(00) 00000-0000" value="${isEdit ? (prof.telefone || '') : ''}">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Cor de Identificação</label>
+                        <input id="prof-cor" type="color" class="swal2-input-custom h-10 p-1" value="${isEdit ? (prof.cor || '#4f46e5') : '#4f46e5'}">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase text-slate-400">Status</label>
+                        <select id="prof-ativo" class="swal2-input-custom">
+                            <option value="true" ${!isEdit || prof.ativo ? 'selected' : ''}>Ativo</option>
+                            <option value="false" ${isEdit && !prof.ativo ? 'selected' : ''}>Inativo</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `,
+        focusConfirm: false,
+        preConfirm: () => {
+            const nome = document.getElementById('prof-nome').value;
+            if (!nome) {
+                Swal.showValidationMessage('Informe o nome do professor');
+                return false;
+            }
+            return {
+                nome: nome,
+                telefone: document.getElementById('prof-telefone').value || null,
+                cor: document.getElementById('prof-cor').value,
+                ativo: document.getElementById('prof-ativo').value === 'true'
+            };
+        }
+    });
+
+    if (formValues) {
+        const url = isEdit ? `${API_URL}/professores/${prof.id}` : `${API_URL}/professores/`;
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const res = await fetchProtegido(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formValues)
+        });
+
+        if (res.ok) {
+            Toast.fire({ icon: 'success', title: isEdit ? 'Professor atualizado!' : 'Professor cadastrado!' });
+            carregarProfessores();
+        } else {
+            const err = await res.json();
+            Swal.fire('Erro', err.detail || 'Não foi possível salvar o professor.', 'error');
+        }
+    }
+}
+
+async function deletarProfessor(id, nome) {
+    const confirm = await Swal.fire({
+        title: `Excluir ${nome}?`,
+        text: "Essa ação só é permitida se não houver aulas futuras agendadas para este professor.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, excluir',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (confirm.isConfirmed) {
+        const res = await fetchProtegido(`${API_URL}/professores/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            Toast.fire({ icon: 'success', title: 'Professor removido!' });
+            carregarProfessores();
+        } else {
+            const err = await res.json();
+            Swal.fire('Não foi possível excluir', err.detail || 'Falha ao deletar professor.', 'error');
+        }
+    }
 }

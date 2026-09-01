@@ -6,11 +6,12 @@ from sqlalchemy import Date, cast
 from app.database import SessionLocal
 from app.models import Aula, Aluno, StatusAula
 from app.services.whatsapp import enviar_whatsapp
+from app.core.config import BASE_URL, agora_br
 
 
 def limpar_creditos_vencidos(db):
     """Transforma créditos de reposição vencidos em status 'ausente'"""
-    agora = datetime.now()
+    agora = agora_br()
     
     # Busca aulas canceladas (que são créditos) cuja validade já passou
     vencidos = db.query(Aula).filter(
@@ -30,9 +31,9 @@ def limpar_creditos_vencidos(db):
 def rodar_cron_completo():
     db = SessionLocal()
     try:
-        agora = datetime.now()
+        agora = agora_br()
         hoje = agora.date()
-        base_url = os.getenv("BASE_URL", "https://smart-booking-saas.onrender.com")
+        base_url = BASE_URL
 
         print(f"--- Iniciando Cron Job: {agora.strftime('%d/%m/%Y %H:%M:%S')} ---")
 

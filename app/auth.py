@@ -5,8 +5,9 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer 
 
+from app.core.config import SECRET_KEY
+
 # --- CONFIGURAÇÕES DE SEGURANÇA JWT ---
-SECRET_KEY = "zm50gNdO9resXqU2xxjsLiRgZKvAiWX561gVu4VHeEU" 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480 
 

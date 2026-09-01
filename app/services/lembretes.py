@@ -5,12 +5,13 @@ import holidays
 from app.database import get_db, SessionLocal 
 from app.models import Aula, StatusAula, TipoAluno
 from app.services.whatsapp import enviar_whatsapp
+from app.core.config import BASE_URL, agora_br
 
 router = APIRouter(prefix="/jobs", tags=["automação"])
 feriados_br = holidays.country_holidays('BR')
 
 def verificar_lembretes(db: Session):
-    agora = datetime.now()
+    agora = agora_br()
 
     if agora in feriados_br:
         print(f"😴 Hoje é {feriados_br.get(agora)}. Lembretes pausados.")
@@ -60,7 +61,7 @@ def verificar_lembretes_background():
     db = SessionLocal()
     try:
         verificar_lembretes(db)
-        agora = datetime.now()
+        agora = agora_br()
         check_24h = agora + timedelta(hours=24)
 
         if check_24h in feriados_br:
@@ -82,7 +83,7 @@ def verificar_lembretes_background():
 
                 if aluno.tipo == TipoAluno.VIP:
                     token_do_aluno = aluno.token_acesso
-                    link_portal = f"https://smart-booking-saas.onrender.com/portal/{token_do_aluno}"
+                    link_portal = f"{BASE_URL}/portal/{token_do_aluno}"
 
                     msg = (
                         f"Olá {aluno.nome}, passando para confirmar sua aula de amanhã! 🎓\n"
