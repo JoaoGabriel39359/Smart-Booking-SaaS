@@ -1,74 +1,71 @@
-# 📅 OneLanguage SaaS - Agenda Inteligente & Automação
+# One School — Agenda SaaS
 
-Este é um sistema **SaaS (Software as a Service)** de alto nível para gestão de agendas, desenvolvido com **FastAPI** e **PostgreSQL**. O foco do projeto é automatizar a rotina de professores e escolas, integrando diretamente com o **Google Calendar** e disparando notificações estratégicas via **WhatsApp (Evolution API)**.
+Monólito para gestão de aulas, turmas, professores, frequência e reposições. O backend usa FastAPI/PostgreSQL e o painel usa React/TypeScript, mantendo o visual já conhecido do sistema One School.
 
----
+## Estrutura
 
-## 🚀 Funcionalidades Principais
+```text
+agenda_saas/
+├── backend/app/       # API FastAPI, regras, rotas e jobs
+├── backend/tests/     # testes automatizados do backend
+├── frontend/          # painel React + TypeScript + Vite
+├── migrations/        # ajustes SQL para bancos já existentes
+├── .env               # variáveis locais (não versionado)
+├── .env.example       # modelo seguro de configuração
+├── .gitignore
+├── pytest.ini
+└── requirements.txt
+```
 
-* **Sincronização com Google Calendar**: Integração total com a API v3 do Google para gestão de horários e disponibilidade em tempo real.
-* **Gestão de Planos VIP & Turmas**: 
-    * Regras automáticas para créditos de reposição (apenas para cancelamentos com > 3h de antecedência).
-    * Diferenciação de tratamento entre alunos VIP e turmas regulares.
-* **Notificações Inteligentes via WhatsApp**:
-    * **Lembrete de Aula (20 min antes)**: Disparo automático para garantir a pontualidade.
-    * **Confirmação Estratégica (10h antes)**: Exclusivo para alunos VIP, facilitando o reagendamento antecipado.
-    * **Avisos de Expiração**: Alertas automáticos sobre a validade de créditos (15 ou 30 dias).
-* **Portal do Aluno Responsivo**: Interface *mobile-first* construída com **Tailwind CSS**, permitindo que o aluno gerencie suas aulas de qualquer lugar.
+O FastAPI serve diretamente o build em `frontend/dist`. O frontend antigo foi removido.
 
----
+## Configuração
 
-## 🛠️ Tecnologias Utilizadas
-
-| Camada | Tecnologia |
-| :--- | :--- |
-| **Backend** | [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+) |
-| **Banco de Dados** | PostgreSQL + SQLAlchemy (Hospedado via Supabase) |
-| **WhatsApp** | [Evolution API](https://evolution-api.com/) |
-| **Calendário** | Google Calendar API v3 (OAuth2) |
-| **Frontend** | Jinja2 Templates & Tailwind CSS |
-| **Deploy** | Render |
-
----
-
-## 📋 Arquitetura de Integração
-
-O sistema utiliza um fluxo de autenticação robusto para garantir que as aulas sejam marcadas diretamente na agenda do professor:
-
-1.  **OAuth2 Flow**: O professor autoriza o app uma única vez através do Google.
-2.  **Refresh Token**: O sistema armazena o token de atualização para manter o acesso vitalício.
-3.  **Background Tasks**: Jobs assíncronos verificam o banco de dados e disparam lembretes via WhatsApp de forma não-bloqueante.
-
----
-
-## 🔧 Configuração do Ambiente
-
-Crie um arquivo `.env` na raiz do projeto e preencha conforme o exemplo abaixo:
+Copie `.env.example` para `.env` e preencha os valores reais:
 
 ```env
-# GOOGLE CALENDAR
-GOOGLE_CLIENT_ID=seu_id_aqui
-GOOGLE_CLIENT_SECRET=seu_secret_aqui
-GOOGLE_REFRESH_TOKEN=seu_refresh_token_aqui
-
-# WHATSAPP (EVOLUTION API)
-URL_WPP=http://seu-ip-da-api:8080
-INSTANCIA_WPP=Nome_da_Instancia
-TOKEN_WPP=seu_token_da_api
-
-# BANCO DE DADOS
 DATABASE_URL=postgresql://usuario:senha@host:porta/database
+ADMIN_USER=seu_usuario
+ADMIN_PASS=sua_senha
+SECRET_KEY=uma_chave_longa_e_aleatoria
+BASE_URL=http://localhost:8000
+TIMEZONE=America/Sao_Paulo
+TELEFONE_PROFESSOR=5511999999999
 
-🏗️ Como Executar
-Instale as dependências:
+GOOGLE_CLIENT_ID=seu_id
+GOOGLE_CLIENT_SECRET=seu_secret
+GOOGLE_REFRESH_TOKEN=seu_refresh_token
 
-Bash
+URL_WPP=http://host-da-evolution:8080
+INSTANCIA_WPP=nome_da_instancia
+TOKEN_WPP=seu_token
+```
+
+## Executar
+
+Na raiz do projeto:
+
+```bash
 pip install -r requirements.txt
-Gere o Token de Acesso (Primeira vez):
-O sistema conta com um script auxiliar para gerar o token.json inicial do professor.
+cd frontend && npm ci && npm run build && cd ..
+uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+```
 
-Bash: 
-python gerar_token.py
+Acesse `http://localhost:8000/login`.
 
-Inicie o Servidor:
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+## Testar
+
+```bash
+python -m pytest -q
+cd frontend && npm run build
+```
+
+## Produção
+
+Antes do primeiro deploy desta versão em um banco existente, execute o SQL de
+`migrations/001_creditos_cancelamento.sql`. Depois configure as variáveis de ambiente,
+gere o frontend e inicie o FastAPI com o mesmo comando acima.
+
+O diretório `frontend/dist` permanece no repositório para que o painel esteja disponível
+mesmo em ambientes de deploy que executem apenas o processo Python. Sempre gere um novo
+build após alterar arquivos em `frontend/src`.
