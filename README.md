@@ -66,6 +66,20 @@ Antes do primeiro deploy desta versão em um banco existente, execute o SQL de
 `migrations/001_creditos_cancelamento.sql`. Depois configure as variáveis de ambiente,
 gere o frontend e inicie o FastAPI com o mesmo comando acima.
 
+### Render
+
+O arquivo `render.yaml` mantém os comandos do deploy alinhados à estrutura do projeto.
+Ao configurar um Web Service manualmente no painel do Render, deixe **Root Directory**
+vazio e use:
+
+```text
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT
+```
+
+Serviços já criados manualmente não passam a usar o `render.yaml` automaticamente; nesse
+caso, atualize o **Start Command** em Settings e solicite um novo deploy.
+
 O diretório `frontend/dist` permanece no repositório para que o painel esteja disponível
 mesmo em ambientes de deploy que executem apenas o processo Python. Sempre gere um novo
 build após alterar arquivos em `frontend/src`.

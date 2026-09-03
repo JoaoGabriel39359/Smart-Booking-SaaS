@@ -254,13 +254,28 @@ export default function TurmasScreen() {
             </div>
             <div className="span-2 field">
               <span>Alunos da turma</span>
-              <div className="check-list">
-                {alunos.map((aluno) => (
-                  <label className="check-row" key={aluno.id}>
-                    <input type="checkbox" checked={draft.aluno_ids.includes(aluno.id)} onChange={() => toggleAluno(aluno.id)} />
-                    <span>{aluno.nome} {aluno.sobrenome} · {aluno.tipo}</span>
-                  </label>
-                ))}
+              <div className="student-picker">
+                <div className="student-picker__summary">
+                  <span>Selecione os alunos que fazem parte desta turma</span>
+                  <strong>{draft.aluno_ids.length} selecionado{draft.aluno_ids.length === 1 ? "" : "s"}</strong>
+                </div>
+                <div className="check-list">
+                  {alunos.length === 0 ? (
+                    <p className="student-picker__empty">Nenhum aluno cadastrado.</p>
+                  ) : alunos.map((aluno) => {
+                    const selected = draft.aluno_ids.includes(aluno.id);
+                    return (
+                      <label className={`check-row${selected ? " check-row--selected" : ""}`} key={aluno.id}>
+                        <input type="checkbox" checked={selected} onChange={() => toggleAluno(aluno.id)} />
+                        <span className="check-row__identity">
+                          <strong>{aluno.nome} {aluno.sobrenome}</strong>
+                          <small>{selected ? "Adicionado à turma" : "Clique para adicionar"}</small>
+                        </span>
+                        <Badge tone={aluno.tipo === "VIP" ? "indigo" : aluno.tipo === "DUO" ? "orange" : undefined}>{aluno.tipo}</Badge>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </form>
