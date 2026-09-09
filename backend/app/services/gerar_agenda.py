@@ -1,11 +1,25 @@
 from datetime import datetime, timedelta
+from threading import Lock
+
+from sqlalchemy.exc import IntegrityError
 from app import models
 from app.database import SessionLocal 
 from app.models import Aluno, HorarioAula, HistoricoAula, Aula, StatusAula # Importamos Aula e StatusAula
 from app.services.google_calendar import criar_evento 
 from app.core.config import agora_br
 
-def gerar_aulas_da_semana(db=None):
+_GERACAO_LOCK = Lock()
+
+
+def gerar_aulas_da_semana(db=None, turma_id: int | None = None):
+    with _GERACAO_LOCK:
+        try:
+            return _gerar_aulas_da_semana(db, turma_id)
+        except IntegrityError:
+            return _gerar_aulas_da_semana(db, turma_id)
+
+
+def _gerar_aulas_da_semana(db=None, turma_id: int | None = None):
     sessao_local = False
     if db is None:
         db = SessionLocal()
@@ -15,7 +29,11 @@ def gerar_aulas_da_semana(db=None):
         hoje = agora_br()
         # Começamos a gerar a partir de hoje para não criar aulas no passado
         inicio_semana = hoje - timedelta(days=hoje.weekday())
-        horarios = db.query(HorarioAula).all()
+        horarios_query = db.query(HorarioAula)
+        if turma_id is not None:
+            horarios_query = horarios_query.filter(HorarioAula.turma_id == turma_id)
+        horarios = horarios_query.all()
+        aulas_criadas = 0
 
         for semana in range(4):
             deslocamento_dias = semana * 7
@@ -88,6 +106,7 @@ def gerar_aulas_da_semana(db=None):
                         )
                         db.add(nova_agenda)
                         db.flush()
+                        aulas_criadas += 1
 
                         # 2. SALVA NO HISTÓRICO (Para a chamada pedagógica)
                         nova_hist = HistoricoAula(
@@ -103,10 +122,12 @@ def gerar_aulas_da_semana(db=None):
         
         db.commit()
         print("🚀 Sincronização finalizada com sucesso nas tabelas Aula e Historico!")
+        return aulas_criadas
 
     except Exception as e:
         db.rollback()
         print(f"❌ Erro ao gerar agenda: {e}")
+        raise
     finally:
         if sessao_local:
             db.close()

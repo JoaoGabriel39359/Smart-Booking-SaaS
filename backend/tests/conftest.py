@@ -78,12 +78,8 @@ def mock_google_calendar(monkeypatch):
     monkeypatch.setattr(app.services.google_calendar, "criar_evento", criar)
     monkeypatch.setattr(app.services.google_calendar, "remover_evento_google", remover)
     monkeypatch.setattr(app.services.gerar_agenda, "criar_evento", criar)
-    monkeypatch.setattr(app.routes.aulas, "criar_evento", criar)
     monkeypatch.setattr(app.routes.aulas, "remover_evento_google", remover)
     monkeypatch.setattr(app.routes.portal, "criar_evento", criar)
     monkeypatch.setattr(app.routes.portal, "remover_evento_google", remover)
-    monkeypatch.setattr(app.routes.turmas, "criar_evento", criar)
-    monkeypatch.setattr(app.routes.turmas, "criar_evento_google", criar)
-    monkeypatch.setattr(app.routes.turmas, "remover_evento_google", remover)
 
     return {"criar": criar, "remover": remover}

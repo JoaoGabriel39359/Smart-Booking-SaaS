@@ -1,103 +1,32 @@
-from fastapi import APIRouter, HTTPException, Depends  
-from app import models
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from app.auth import verificar_token
-from app.services.google_calendar import criar_evento as criar_evento_google, remover_evento_google, criar_evento
-from app.services.gerar_agenda import gerar_aulas_da_semana
+from app.services.agenda_background import (
+    remover_eventos_google_sem_referencia,
+    sincronizar_agenda_completa,
+    sincronizar_agenda_turma,
+)
 from sqlalchemy.orm import Session                     
-from sqlalchemy import func, cast, Time
+from sqlalchemy import func, Time
 from app.database import get_db          
 from app.models import Turma, Aluno, Aula, HorarioAula, Professor, StatusAula, HistoricoAula
 from app.core.config import agora_br
 from app.routes.aulas import remover_aula_completa
-from datetime import datetime, timedelta
-import calendar
+from datetime import datetime
 
 router = APIRouter(prefix="/turmas", tags=["turmas"])
 
 LIMITES_POR_TIPO = {"VIP": 1, "DUO": 2, "TEAM": 6}
 DIAS_EXTENSO = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
 
-# ==========================================================
-# FUNÇÃO AUXILIAR (A INCREMENTAÇÃO)
-# ==========================================================
-
-def processar_geracao_aulas(db: Session, turma: Turma):
-    """Gera aulas para os próximos 30 dias a partir de hoje"""
-    hoje = agora_br().date()
-    fim_periodo = hoje + timedelta(days=30)
-    
-    dias_map = {
-        "Segunda": 0, "Terça": 1, "Quarta": 2, 
-        "Quinta": 3, "Sexta": 4, "Sábado": 5, "Domingo": 6
-    }
-    
-    dia_alvo = dias_map.get(turma.dia_semana)
-    if dia_alvo is None:
-        return 0
-
-    aulas_criadas = 0
-    data_atual = hoje
-
-    # Inicializamos o link com o que está gravado na turma (se houver)
-    link_meet_da_turma = turma.meet_link 
-
-    while data_atual <= fim_periodo:
-        if data_atual.weekday() == dia_alvo:
-            hora_aula = datetime.strptime(turma.horario, "%H:%M").time()
-            data_inicio = datetime.combine(data_atual, hora_aula)
-            data_fim = data_inicio + timedelta(minutes=turma.duracao_minutos or 60)
-
-            google_id = None
-            try:
-                titulo_google = f"Turma {turma.tipo}: {turma.nome_turma}"
-                
-                # Chamamos a função atualizada passando o link_meet_da_turma
-                # Ela retorna duas coisas: o ID do evento e o link
-                google_id, link_retornado = criar_evento(
-                    data_inicio, 
-                    data_fim, 
-                    titulo_google, 
-                    meet_link_existente=link_meet_da_turma
-                )
-                
-                # Se a turma não tinha link e o Google acabou de gerar o primeiro,
-                # nós salvamos ele para usar nas próximas semanas deste loop
-                if not link_meet_da_turma and link_retornado:
-                    link_meet_da_turma = link_retornado
-                    turma.meet_link = link_retornado
-                    db.flush()
-                
-                print(f"✅ Sincronizado no Google: {data_inicio} | Meet: {link_meet_da_turma}")
-            except Exception as g_error:
-                print(f"❌ Erro Google Agenda: {g_error}")
-
-            for aluno in turma.alunos:
-                existe = db.query(Aula).filter(
-                    Aula.aluno_id == aluno.id, 
-                    Aula.data_inicio == data_inicio
-                ).first()
-                
-                if not existe:
-                    nova_aula = Aula(
-                        aluno_id=aluno.id,
-                        turma_id=turma.id,
-                        professor_id=turma.professor_id,
-                        data_inicio=data_inicio,
-                        data_fim=data_fim,
-                        status=StatusAula.marcada,
-                        google_event_id=google_id
-                    )
-                    db.add(nova_aula)
-                    aulas_criadas += 1
-            db.flush() 
-            
-        data_atual += timedelta(days=1)
-    db.commit()
-    return aulas_criadas
 
 # --- CRIAR TURMA ---
 @router.post("/")
-def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def criar_turma(
+    dados: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: str = Depends(verificar_token),
+):
     try:
         limites = {"VIP": 1, "DUO": 2, "TEAM": 6}
         limite_max = limites.get(dados.get('tipo'), 6)
@@ -153,13 +82,13 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
         # 4. Salva tudo no banco de uma vez
         db.commit()
 
-        # 5. Gera a agenda (agora que os alunos já estão na turma)
-        try:
-            gerar_aulas_da_semana(db) 
-        except Exception as e_agenda:
-            print(f"Erro ao gerar agenda inicial: {e_agenda}")
+        background_tasks.add_task(sincronizar_agenda_turma, nova_turma.id)
+        return {
+            "status": "sucesso",
+            "msg": f"Turma {nova_turma.nome_turma} criada!",
+            "agenda_sincronizando": True,
+        }
 
-        return {"msg": f"Turma {nova_turma.nome_turma} criada com {len(horarios_recebidos)} horários!"}
         
     except Exception as e:
         db.rollback()
@@ -167,7 +96,13 @@ def criar_turma(dados: dict, db: Session = Depends(get_db), usuario: str = Depen
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/{turma_id}")
-def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def editar_turma(
+    turma_id: int,
+    dados: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: str = Depends(verificar_token),
+):
     """
     Edicao completa da turma: nome, meet, tipo, duracao, dias/horarios e alunos.
 
@@ -247,7 +182,7 @@ def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usua
             turma.dia_semana = ", ".join(DIAS_EXTENSO[d] for d, _ in novos_horarios)
             turma.horario = ", ".join(hh.strftime("%H:%M") for _, hh in novos_horarios)
 
-            db.query(HorarioAula).filter(HorarioAula.turma_id == turma_id).delete(synchronize_session=False)
+            db.query(HorarioAula).filter(HorarioAula.turma_id == turma_id).delete(synchronize_session="fetch")
             for dia, hora in novos_horarios:
                 db.add(HorarioAula(turma_id=turma_id, dia_da_semana=dia, horario=hora))
 
@@ -278,6 +213,7 @@ def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usua
         )
 
         aulas_removidas = 0
+        event_ids_removidos: set[str] = set()
         if precisa_regerar:
             # Pega tambem as aulas dos alunos que sairam: elas tem turma_id desta turma.
             aulas_futuras = db.query(Aula).filter(
@@ -287,30 +223,21 @@ def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usua
             ).all()
 
             for aula in aulas_futuras:
-                remover_aula_completa(db, aula, motivo="Edição de turma", apagar_google=True)
+                if aula.google_event_id:
+                    event_ids_removidos.add(aula.google_event_id)
+                remover_aula_completa(db, aula, motivo="Edição de turma", apagar_google=False)
                 aulas_removidas += 1
 
         db.commit()
 
         if precisa_regerar:
-            # gerar_aulas_da_semana faz o proprio commit e recria 4 semanas a frente
-            # respeitando duracao_minutos e a nova lista de alunos.
-            try:
-                gerar_aulas_da_semana(db)
-            except Exception as e_agenda:
-                print(f"⚠️ Turma salva, mas falhou ao regerar a agenda: {e_agenda}")
-                return {
-                    "status": "parcial",
-                    "msg": f"Turma {turma.nome_turma} atualizada, mas a agenda não pôde ser "
-                           f"regerada automaticamente. Use o botão 'Gerar Aulas do Mês'.",
-                    "aulas_removidas": aulas_removidas
-                }
+            background_tasks.add_task(sincronizar_agenda_turma, turma_id, tuple(event_ids_removidos))
 
         return {
             "status": "sucesso",
             "msg": f"Turma {turma.nome_turma} atualizada!",
             "aulas_removidas": aulas_removidas,
-            "agenda_regerada": precisa_regerar
+            "agenda_sincronizando": precisa_regerar
         }
 
     except HTTPException:
@@ -323,12 +250,15 @@ def editar_turma(turma_id: int, dados: dict, db: Session = Depends(get_db), usua
 
 # --- GERAR MENSAL (VERSÃO UNIFICADA) ---
 @router.post("/gerar-mensal")
-def rota_gerar_mensal(db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
-    try:
-        gerar_aulas_da_semana(db)
-        return {"msg": "Agenda do mês e Google Calendar sincronizados com sucesso!"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao sincronizar: {str(e)}")
+def rota_gerar_mensal(
+    background_tasks: BackgroundTasks,
+    usuario: str = Depends(verificar_token),
+):
+    background_tasks.add_task(sincronizar_agenda_completa)
+    return {
+        "status": "sucesso",
+        "msg": "Sincronização da agenda iniciada em segundo plano.",
+    }
 
 # --- LISTAR TURMAS ---
 @router.get("/")
@@ -358,7 +288,12 @@ def listar_turmas(db: Session = Depends(get_db), usuario: str = Depends(verifica
 
 # --- DELETAR TURMA ---
 @router.delete("/{turma_id}")
-def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def deletar_turma(
+    turma_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: str = Depends(verificar_token),
+):
     try:
         turma = db.query(Turma).filter(Turma.id == turma_id).first()
         if not turma:
@@ -388,6 +323,7 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
                     aulas_para_remover.extend(aulas_orfas)
 
         aulas_unicas = list({a.id: a for a in aulas_para_remover}.values())
+        event_ids_removidos: set[str] = set()
 
         # Remove somente agendamentos futuros ainda não realizados.
         for aula in aulas_unicas:
@@ -404,7 +340,9 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
                 aula.turma_id = None
                 continue
 
-            remover_aula_completa(db, aula, apagar_google=True)
+            if aula.google_event_id:
+                event_ids_removidos.add(aula.google_event_id)
+            remover_aula_completa(db, aula, apagar_google=False)
 
         if alunos_ids:
 
@@ -418,6 +356,7 @@ def deletar_turma(turma_id: int, db: Session = Depends(get_db), usuario: str = D
         db.delete(turma)
 
         db.commit()
+        background_tasks.add_task(remover_eventos_google_sem_referencia, tuple(event_ids_removidos))
         return {"msg": "Turma e agendamentos deletados com sucesso!"}
 
     except HTTPException:

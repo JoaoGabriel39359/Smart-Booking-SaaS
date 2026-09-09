@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, CalendarPlus, CheckCircle2, Clock3, X } from "lucide-react";
 import { api, errorMessage, query } from "../services/api";
 import type { AgendaAluno, Aluno, Grade, SessaoAgenda } from "../types";
@@ -28,6 +28,8 @@ export default function AgendaScreen() {
   const [avulsaOpen, setAvulsaOpen] = useState(false);
   const [desempenho, setDesempenho] = useState("Bom");
   const [observacao, setObservacao] = useState("");
+  const schedulingRef = useRef(false);
+  const [scheduling, setScheduling] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -93,6 +95,9 @@ export default function AgendaScreen() {
 
   async function criarAvulsa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (schedulingRef.current) return;
+    schedulingRef.current = true;
+    setScheduling(true);
     const form = new FormData(event.currentTarget);
     try {
       await api.post("/aulas/avulsa", {
@@ -101,10 +106,13 @@ export default function AgendaScreen() {
         grade_id: form.get("grade_id") || null,
       });
       setAvulsaOpen(false);
-      setMessage({ text: "Aula individual criada.", kind: "success" });
+      setMessage({ text: "Aula criada. O Google Calendar está sendo sincronizado.", kind: "success" });
       await load();
     } catch (err) {
       setMessage({ text: errorMessage(err), kind: "error" });
+    } finally {
+      schedulingRef.current = false;
+      setScheduling(false);
     }
   }
 
@@ -229,11 +237,11 @@ export default function AgendaScreen() {
         open={avulsaOpen}
         title="Nova aula individual"
         description="O horário será validado novamente no momento do cadastro."
-        onClose={() => setAvulsaOpen(false)}
+        onClose={() => { if (!scheduling) setAvulsaOpen(false); }}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setAvulsaOpen(false)}>Cancelar</Button>
-            <Button type="submit" form="form-avulsa">Agendar</Button>
+            <Button variant="secondary" disabled={scheduling} onClick={() => setAvulsaOpen(false)}>Cancelar</Button>
+            <Button type="submit" form="form-avulsa" disabled={scheduling}>{scheduling ? "Agendando..." : "Agendar"}</Button>
           </>
         }
       >

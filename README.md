@@ -115,6 +115,15 @@ cd frontend && npm run build
 
 ## Deployment notes
 
+Antes de publicar esta versão sobre um banco PostgreSQL existente, execute
+`migrations/002_prevenir_aulas_duplicadas.sql`. A migração cria a proteção contra duas
+aulas ativas do mesmo aluno no mesmo horário. Ela não apaga registros: caso já existam
+duplicidades, interrompe a execução para que elas sejam revisadas antes de criar o índice.
+
+Depois configure as variáveis de ambiente, gere o frontend e inicie o FastAPI.
+
+### Render
+
 The repository includes `render.yaml`. Existing manually configured Render services should keep the repository root as the root directory and use:
 
 ```text

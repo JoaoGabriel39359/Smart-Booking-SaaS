@@ -3,10 +3,12 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query as FastAPIQuery
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import IntegrityError
 from app.auth import verificar_token
 from app.services.whatsapp import enviar_whatsapp
 from app.database import get_db # Removido SessionLocal daqui
-from app.services.google_calendar import criar_evento, remover_evento_google
+from app.services.agenda_background import sincronizar_evento_aulas
+from app.services.google_calendar import remover_evento_google
 from app.models import Aluno, Aula, GradeProfessor, HistoricoAula, Professor, StatusAula
 from datetime import datetime, timedelta
 from app.core.config import BASE_URL, TELEFONE_PROFESSOR, agora_br
@@ -78,6 +80,14 @@ def marcar_aula(
         if aluno.turma_id and aluno.tipo.value != "VIP":
             colegas = db.query(Aluno).filter(Aluno.turma_id == aluno.turma_id, Aluno.id != aluno.id).all()
             lista_alunos.extend(colegas)
+        ids_lista = [pessoa.id for pessoa in lista_alunos]
+        duplicada = db.query(Aula.id).filter(
+            Aula.aluno_id.in_(ids_lista),
+            Aula.data_inicio == inicio,
+            Aula.status == StatusAula.marcada,
+        ).first()
+        if duplicada:
+            raise HTTPException(status_code=409, detail="Esta aula já está agendada.")
         
         for pessoinha in lista_alunos:
             if eh_reposicao:
@@ -107,13 +117,7 @@ def marcar_aula(
         if ocupadas >= cap_max:
             raise HTTPException(status_code=400, detail="Este horário já está ocupado para o professor selecionado.")
         
-        g_id = None  
-        meet_link = None
         titulo_aula = f"Aula: {aluno.nome}" if len(lista_alunos) == 1 else f"Aula Turma: {aluno.turma.nome_turma if aluno.turma else 'Coletiva'}"
-        try:
-            g_id, meet_link = criar_evento(inicio, fim, titulo_aula)
-        except Exception as ge:
-            print(f"DEBUG: Falha Google Calendar: {ge}")
 
         novas_aulas = []
         for p in lista_alunos:
@@ -128,7 +132,7 @@ def marcar_aula(
                 data_inicio=inicio,
                 data_fim=fim,
                 status=StatusAula.marcada, 
-                google_event_id=g_id,
+                google_event_id=None,
                 eh_reposicao=eh_reposicao,
                 validade_reposicao=data_validade,
                 lembrete_enviado=False
@@ -143,12 +147,13 @@ def marcar_aula(
                 data_aula=inicio,
                 status_presenca=False,
                 chamada_realizada=False,
-                google_event_id=g_id,
+                google_event_id=None,
                 observacao="Aula de Turma Agendada" if p.turma_id else "Aula VIP Agendada"
             )
             db.add(novo_hist)
 
         db.commit()
+        background_tasks.add_task(sincronizar_evento_aulas, [aula.id for aula in novas_aulas], inicio, fim, titulo_aula)
 
         prof_nome = None
         if professor_id:
@@ -169,8 +174,11 @@ def marcar_aula(
 
             background_tasks.add_task(enviar_whatsapp, aula_criada.aluno.telefone, msg_confirmacao)
 
-        return {"status": "sucesso", "event_id": g_id, "google_sync": True if g_id else False}
+        return {"status": "sucesso", "google_sync_pending": True}
 
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Esta aula já foi agendada.")
     except HTTPException as http_e:
         raise http_e
     except Exception as e:
@@ -179,7 +187,12 @@ def marcar_aula(
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 @router.post("/avulsa")
-async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario: str = Depends(verificar_token)):
+def criar_aula_avulsa(
+    dados: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: str = Depends(verificar_token),
+):
     try:
         aluno_id = int(dados['aluno_id'])
         aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
@@ -188,6 +201,13 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
 
         inicio = datetime.fromisoformat(dados['data_inicio'])
         fim = inicio + timedelta(minutes=duracao_aula_minutos(db, aluno))
+        duplicada = db.query(Aula.id).filter(
+            Aula.aluno_id == aluno_id,
+            Aula.data_inicio == inicio,
+            Aula.status == StatusAula.marcada,
+        ).first()
+        if duplicada:
+            raise HTTPException(status_code=409, detail="Esta aula já está agendada.")
         grade_id = int(dados["grade_id"]) if dados.get("grade_id") else None
         professor_id = None
         if grade_id:
@@ -201,13 +221,7 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
             raise HTTPException(status_code=409, detail="Já existe uma aula neste horário.")
 
 
-        google_event_id = None
-        meet_link_avulso = None
         titulo_aula = f"Aula VIP: {aluno.nome} {aluno.sobrenome or ''}"
-        try:
-            google_event_id, meet_link_avulso = criar_evento(inicio, fim, titulo_aula)
-        except Exception as ge:
-            print(f"DEBUG: Falha Google Calendar: {ge}")
 
         nova_aula = Aula(
             aluno_id=aluno_id,
@@ -216,7 +230,7 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
             data_inicio=inicio,
             data_fim=fim,
             status=StatusAula.marcada,
-            google_event_id=google_event_id,
+            google_event_id=None,
         )
         db.add(nova_aula)
         db.flush() 
@@ -228,11 +242,21 @@ async def criar_aula_avulsa(dados: dict, db: Session = Depends(get_db), usuario:
             status_presenca=False,
             chamada_realizada=False,
             observacao="Aula Avulsa Agendada",
-            google_event_id=google_event_id
+            google_event_id=None
         )
         db.add(novo_historico)
         db.commit()
-        return {"msg": "Aula agendada!", "id_historico": novo_historico.id}
+        background_tasks.add_task(
+            sincronizar_evento_aulas,
+            [nova_aula.id],
+            inicio,
+            fim,
+            titulo_aula,
+        )
+        return {"msg": "Aula agendada!", "id_historico": novo_historico.id, "google_sync_pending": True}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Esta aula já foi agendada.")
     except HTTPException:
         db.rollback()
         raise

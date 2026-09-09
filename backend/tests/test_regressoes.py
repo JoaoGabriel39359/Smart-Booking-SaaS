@@ -341,7 +341,7 @@ def test_excluir_turma_preserva_historico_e_credito(db_session):
     db_session.commit()
     ids = realizada.id, futura.id, credito.id
 
-    deletar_turma(turma.id, db=db_session, usuario="teste")
+    deletar_turma(turma.id, BackgroundTasks(), db=db_session, usuario="teste")
 
     realizada_salva = db_session.get(Aula, ids[0])
     assert realizada_salva is not None

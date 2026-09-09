@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CalendarSync, Edit3, Plus, Search, Trash2, X } from "lucide-react";
 import { api, errorMessage } from "../services/api";
 import type { Aluno, HorarioTurma, Professor, TipoAluno, Turma } from "../types";
@@ -47,6 +47,10 @@ export default function TurmasScreen() {
   const [novaHora, setNovaHora] = useState("08:00");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "error" | "success" } | null>(null);
 
   async function load() {
@@ -109,11 +113,13 @@ export default function TurmasScreen() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!draft) return;
+    if (!draft || savingRef.current) return;
     if (!draft.horarios.length) {
       setNotice({ text: "Adicione ao menos um dia e horário.", kind: "error" });
       return;
     }
+    savingRef.current = true;
+    setSaving(true);
     const payload = {
       nome_turma: draft.nome_turma,
       tipo: draft.tipo,
@@ -127,32 +133,43 @@ export default function TurmasScreen() {
       if (draft.turma) await api.put(`/turmas/${draft.turma.id}`, payload);
       else await api.post("/turmas/", payload);
       setDraft(null);
-      setNotice({ text: "Turma salva e agenda futura sincronizada.", kind: "success" });
+      setNotice({ text: "Turma salva. A agenda está sendo sincronizada em segundo plano.", kind: "success" });
       await load();
     } catch (err) {
       setNotice({ text: errorMessage(err), kind: "error" });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
   async function remove(turma: Turma) {
+    if (removingId !== null) return;
     if (!confirm(`Excluir ${turma.nome_turma}? Aulas realizadas e créditos serão preservados.`)) return;
+    setRemovingId(turma.id);
     try {
       await api.delete(`/turmas/${turma.id}`);
-      setNotice({ text: "Turma removida; histórico e créditos foram preservados.", kind: "success" });
+      setNotice({ text: "Turma removida. A limpeza do calendário continua em segundo plano.", kind: "success" });
       await load();
     } catch (err) {
       setNotice({ text: errorMessage(err), kind: "error" });
+    } finally {
+      setRemovingId(null);
     }
   }
 
   async function generate() {
+    if (generating) return;
     if (!confirm("Gerar e sincronizar as próximas quatro semanas?")) return;
+    setGenerating(true);
     try {
       await api.post("/turmas/gerar-mensal");
-      setNotice({ text: "Agenda mensal sincronizada.", kind: "success" });
+      setNotice({ text: "Sincronização da agenda iniciada em segundo plano.", kind: "success" });
       await load();
     } catch (err) {
       setNotice({ text: errorMessage(err), kind: "error" });
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -164,7 +181,7 @@ export default function TurmasScreen() {
         description="Edite composição, duração, horários e professor sem destruir o histórico nem os créditos."
         actions={
           <>
-            <Button variant="secondary" onClick={() => void generate()}><CalendarSync size={17} /> Gerar mês</Button>
+            <Button variant="secondary" disabled={generating} onClick={() => void generate()}><CalendarSync size={17} /> {generating ? "Sincronizando..." : "Gerar mês"}</Button>
             <Button onClick={() => setDraft(emptyDraft())}><Plus size={17} /> Nova turma</Button>
           </>
         }
@@ -193,7 +210,7 @@ export default function TurmasScreen() {
                   <p>{turma.horarios?.map((h) => `${dias[h.dia]} ${h.hora}`).join(" · ") || "Sem horário"}</p>
                   <div className="data-card__actions">
                     <Button variant="secondary" onClick={() => edit(turma)}><Edit3 size={14} /> Editar</Button>
-                    <Button variant="danger" onClick={() => void remove(turma)}><Trash2 size={14} /></Button>
+                    <Button variant="danger" disabled={removingId !== null} onClick={() => void remove(turma)}>{removingId === turma.id ? "Excluindo..." : <Trash2 size={14} />}</Button>
                   </div>
                 </Card>
               ))}
@@ -206,12 +223,12 @@ export default function TurmasScreen() {
         open={Boolean(draft)}
         title={draft?.turma ? "Editar turma" : "Nova turma"}
         description="Mudanças estruturais regeneram somente os agendamentos futuros."
-        onClose={() => setDraft(null)}
+        onClose={() => { if (!saving) setDraft(null); }}
         wide
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDraft(null)}>Cancelar</Button>
-            <Button type="submit" form="form-turma">Salvar turma</Button>
+            <Button variant="secondary" disabled={saving} onClick={() => setDraft(null)}>Cancelar</Button>
+            <Button type="submit" form="form-turma" disabled={saving}>{saving ? "Salvando..." : "Salvar turma"}</Button>
           </>
         }
       >

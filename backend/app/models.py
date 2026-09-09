@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum, Time
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum, Index, Time
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
@@ -79,6 +79,15 @@ class Aula(Base):
     turma = relationship("Turma")
     professor = relationship("Professor", back_populates="aulas")
     historicos = relationship("HistoricoAula", back_populates="aula", cascade="all, delete-orphan")
+
+Index(
+    "uq_aulas_aluno_inicio_marcada",
+    Aula.aluno_id,
+    Aula.data_inicio,
+    unique=True,
+    postgresql_where=Aula.status == StatusAula.marcada,
+    sqlite_where=Aula.status == StatusAula.marcada,
+)
 
 class Turma(Base):
     __tablename__ = "turmas"
