@@ -1,8 +1,13 @@
 import uuid
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Enum, Index, Time
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
+
+
+def agora_utc_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Definindo os tipos de Aluno e Status de Aula
 class TipoAluno(enum.Enum):
@@ -149,3 +154,40 @@ class HistoricoAula(Base):
 
     aluno = relationship("Aluno", back_populates="historico")
     aula = relationship("Aula", back_populates="historicos")
+
+class MensagemWhatsApp(Base):
+    """Registro local usado para impedir duplicidade e acompanhar a entrega."""
+
+    __tablename__ = "mensagens_whatsapp"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(180), nullable=False, unique=True, index=True)
+    provider = Column(String(30), nullable=False, default="desconhecido")
+    provider_message_id = Column(String(180), nullable=True, index=True)
+    wamid = Column(String(255), nullable=True, index=True)
+    tipo = Column(String(80), nullable=False, index=True)
+    template_nome = Column(String(160), nullable=True)
+    destinatario = Column(String(30), nullable=False, index=True)
+    aluno_id = Column(Integer, ForeignKey("alunos.id", ondelete="SET NULL"), nullable=True, index=True)
+    aula_id = Column(Integer, ForeignKey("aulas.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String(30), nullable=False, default="processando", index=True)
+    tentativas = Column(Integer, nullable=False, default=0)
+    erro_codigo = Column(String(100), nullable=True)
+    erro_mensagem = Column(String(1000), nullable=True)
+    criado_em = Column(DateTime, nullable=False, default=agora_utc_naive)
+    atualizado_em = Column(DateTime, nullable=False, default=agora_utc_naive, onupdate=agora_utc_naive)
+    aceito_em = Column(DateTime, nullable=True)
+    enviado_em = Column(DateTime, nullable=True)
+    entregue_em = Column(DateTime, nullable=True)
+    lido_em = Column(DateTime, nullable=True)
+    falhou_em = Column(DateTime, nullable=True)
+
+
+class EventoWebhookWhatsApp(Base):
+    """Eventos já processados; a YCloud pode reenviar o mesmo webhook."""
+
+    __tablename__ = "eventos_webhook_whatsapp"
+
+    event_id = Column(String(180), primary_key=True)
+    event_type = Column(String(100), nullable=False, index=True)
+    recebido_em = Column(DateTime, nullable=False, default=agora_utc_naive)

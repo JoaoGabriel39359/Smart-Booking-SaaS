@@ -22,6 +22,7 @@ from app.routes.turmas import deletar_turma
 from app.services.creditos import consumir_credito
 from app.services.disponibilidade import contar_reservas_simultaneas, resolver_grade_disponivel
 from app.services.gerar_agenda import gerar_aulas_da_semana
+from app.services.whatsapp import ResultadoEnvio
 
 
 def test_credito_consumido_nao_reaparece_no_relatorio(db_session):
@@ -466,7 +467,7 @@ def test_relatorio_aluno_preserva_duas_aulas_no_mesmo_dia(db_session):
     }
 
 
-def test_envio_portal_nao_confirma_quando_evolution_falha(db_session, monkeypatch):
+def test_envio_portal_nao_confirma_quando_provedor_falha(db_session, monkeypatch):
     aluno = Aluno(
         nome="Falha", sobrenome="WhatsApp", telefone="551100000009",
         token_acesso="falha-whatsapp", tipo=TipoAluno.VIP,
@@ -474,13 +475,22 @@ def test_envio_portal_nao_confirma_quando_evolution_falha(db_session, monkeypatc
     db_session.add(aluno)
     db_session.commit()
     monkeypatch.setattr("app.routes.alunos.BASE_URL", "https://agenda.exemplo.com")
-    monkeypatch.setattr("app.routes.alunos.enviar_whatsapp", lambda *_: False)
+    monkeypatch.setattr(
+        "app.routes.alunos.enviar_notificacao_rastreada",
+        lambda *args, **kwargs: ResultadoEnvio(
+            aceito=False,
+            provider="ycloud",
+            status="falhou",
+            erro_codigo="TEMPLATE_REJEITADO",
+            erro_mensagem="Template rejeitado",
+        ),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         enviar_link_portal_whatsapp(aluno.id, db=db_session, usuario="teste")
 
     assert exc_info.value.status_code == 502
-    assert "instância" in exc_info.value.detail
+    assert "TEMPLATE_REJEITADO" in exc_info.value.detail
 
 
 def test_envio_portal_bloqueia_link_local(db_session, monkeypatch):

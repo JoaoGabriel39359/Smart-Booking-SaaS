@@ -3,7 +3,7 @@ from sqlalchemy import Date, cast
 
 from app.database import SessionLocal
 from app.models import Aula, Aluno, StatusAula, TipoAluno
-from app.services.whatsapp import enviar_whatsapp
+from app.services.notificacoes_whatsapp import enviar_notificacao_rastreada
 from app.core.config import BASE_URL, agora_br
 
 
@@ -54,8 +54,18 @@ def rodar_cron_completo():
                 tempo_texto = "vence em *15 dias*" if dias == 15 else "vence *AMANHÃ*"
                 msg = (f"Olá {aluno.nome}! ⏳\n\nSua reposição {tempo_texto}.\nAgende pelo portal:\n{link_portal}")
                 try:
-                    enviar_whatsapp(aluno.telefone, msg)
-                    print(f"✅ Alerta de vencimento: {aluno.nome}")
+                    resultado = enviar_notificacao_rastreada(
+                        db,
+                        external_id=f"aula:{aula.id}:credito-vencendo:{dias}d",
+                        numero=aluno.telefone,
+                        tipo="credito_vencendo",
+                        parametros=[aluno.nome, f"{dias} dias" if dias > 1 else "amanhã", link_portal],
+                        mensagem_fallback=msg,
+                        aluno_id=aluno.id,
+                        aula_id=aula.id,
+                    )
+                    if resultado:
+                        print(f"✅ Alerta de vencimento aceito: {aluno.nome}")
                 except Exception as e:
                     print(f"❌ Erro envio alerta vencimento: {e}")
 
@@ -72,8 +82,24 @@ def rodar_cron_completo():
             link_portal = f"{base_url}/portal/{aula.aluno.token_acesso}"
             msg = (f"Olá {aula.aluno.nome}! Aula confirmada para AMANHÃ às {aula.data_inicio.strftime('%H:%M')}?\n{link_portal}")
             try:
-                enviar_whatsapp(aula.aluno.telefone, msg)
-                print(f"✅ Alerta 24h: {aula.aluno.nome}")
+                resultado = enviar_notificacao_rastreada(
+                    db,
+                    external_id=f"aula:{aula.id}:lembrete-24h",
+                    numero=aula.aluno.telefone,
+                    tipo="lembrete_24h",
+                    parametros=[
+                        aula.aluno.nome,
+                        aula.data_inicio.strftime('%d/%m'),
+                        aula.data_inicio.strftime('%H:%M'),
+                        link_portal,
+                    ],
+                    mensagem_fallback=msg,
+                    aluno_id=aula.aluno.id,
+                    aula_id=aula.id,
+                )
+                if resultado:
+                    aula.lembrete_10h_enviado = True
+                    print(f"✅ Alerta 24h aceito: {aula.aluno.nome}")
             except Exception as e:
                 print(f"❌ Erro envio 24h: {e}")
 
@@ -101,9 +127,19 @@ def rodar_cron_completo():
                     f"Até logo! 🚀"
                 )
                 try:
-                    enviar_whatsapp(a.aluno.telefone, msg)
-                    a.lembrete_enviado = True 
-                    print(f"✅ Lembrete enviado para: {a.aluno.nome}")
+                    resultado = enviar_notificacao_rastreada(
+                        db,
+                        external_id=f"aula:{a.id}:lembrete-20m",
+                        numero=a.aluno.telefone,
+                        tipo="lembrete_breve",
+                        parametros=[a.aluno.nome, horario, link_portal],
+                        mensagem_fallback=msg,
+                        aluno_id=a.aluno.id,
+                        aula_id=a.id,
+                    )
+                    if resultado:
+                        a.lembrete_enviado = True
+                        print(f"✅ Lembrete breve aceito para: {a.aluno.nome}")
                 except Exception as e:
                     print(f"❌ Erro ao enviar: {e}")
 

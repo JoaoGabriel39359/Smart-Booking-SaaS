@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from app.main import app
 from app.database import Base, get_db
 from app.services import whatsapp
+from app.services.whatsapp import ResultadoEnvio
 
 # 1. Configuração de um banco de dados SQLite em memória para testes
 SQLALCHEMY_DATABASE_URL = "sqlite://"
@@ -47,20 +48,60 @@ def client(db_session):
 
 @pytest.fixture(autouse=True)
 def mock_whatsapp(monkeypatch):
-    """Finge o envio de WhatsApp para que os testes não gastem créditos ou enviem SPAM"""
-    mock = MagicMock()
-    # Substitui a função real no local de definição
-    monkeypatch.setattr(whatsapp, "enviar_whatsapp", mock)
-    # E também nos locais onde foi importada diretamente para os namespaces dos módulos
-    import app.routes.aulas
+    """Impede chamadas reais aos provedores de WhatsApp durante a suíte."""
+    resultado = ResultadoEnvio(
+        aceito=True,
+        provider="teste",
+        status="accepted",
+        id_mensagem="mensagem-teste",
+    )
+    mock_texto = MagicMock(return_value=True)
+    mock_template = MagicMock(return_value=resultado)
+    mock_background = MagicMock()
+
+    monkeypatch.setattr(whatsapp, "enviar_whatsapp", mock_texto)
+
+    import app.jobs.cron_alertas
     import app.routes.alunos
+    import app.routes.aulas
     import app.routes.portal
+    import app.routes.webhook
     import app.services.lembretes
-    monkeypatch.setattr(app.routes.aulas, "enviar_whatsapp", mock)
-    monkeypatch.setattr(app.routes.alunos, "enviar_whatsapp", mock)
-    monkeypatch.setattr(app.routes.portal, "enviar_whatsapp", mock)
-    monkeypatch.setattr(app.services.lembretes, "enviar_whatsapp", mock)
-    return mock
+    import app.services.notificacoes_whatsapp
+
+    monkeypatch.setattr(
+        app.services.notificacoes_whatsapp,
+        "enviar_template_whatsapp",
+        mock_template,
+    )
+    monkeypatch.setattr(
+        app.services.lembretes,
+        "enviar_notificacao_rastreada",
+        mock_template,
+    )
+    monkeypatch.setattr(
+        app.jobs.cron_alertas,
+        "enviar_notificacao_rastreada",
+        mock_template,
+    )
+    monkeypatch.setattr(
+        app.routes.alunos,
+        "enviar_notificacao_rastreada",
+        mock_template,
+    )
+    monkeypatch.setattr(
+        app.routes.aulas,
+        "enviar_notificacao_background",
+        mock_background,
+    )
+    monkeypatch.setattr(
+        app.routes.portal,
+        "enviar_notificacao_background",
+        mock_background,
+    )
+    monkeypatch.setattr(app.routes.webhook, "enviar_whatsapp", mock_texto)
+
+    return mock_background
 
 
 @pytest.fixture(autouse=True)

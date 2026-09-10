@@ -15,7 +15,7 @@ One School replaces fragmented spreadsheets and manual follow-ups with a central
 - Attendance history and frequency reporting
 - Cancellation rules and replacement-credit lifecycle
 - Google Calendar synchronization
-- Automated WhatsApp reminders through Evolution API
+- Automated WhatsApp reminders through the official YCloud/Meta API, with delivery tracking
 - Role-protected administrative access
 - Background jobs for operational automation
 - Responsive React dashboard
@@ -34,7 +34,7 @@ React + TypeScript + Vite
     v                    v
 PostgreSQL         External services
 SQLAlchemy         Google Calendar
-                   Evolution API / WhatsApp
+                   YCloud / WhatsApp Cloud API
 ```
 
 The FastAPI application also serves the production frontend build from `frontend/dist`, allowing the project to run as a single deployable service.
@@ -46,7 +46,7 @@ The FastAPI application also serves the production frontend build from `frontend
 | Backend | Python, FastAPI, SQLAlchemy, Pydantic |
 | Frontend | React, TypeScript, Vite |
 | Database | PostgreSQL |
-| Integrations | Google Calendar API, Evolution API / WhatsApp |
+| Integrations | Google Calendar API, YCloud / WhatsApp Business Platform |
 | Quality | Pytest, automated backend tests |
 | Deployment | Render, Uvicorn |
 
@@ -115,10 +115,14 @@ cd frontend && npm run build
 
 ## Deployment notes
 
-Antes de publicar esta versão sobre um banco PostgreSQL existente, execute
-`migrations/002_prevenir_aulas_duplicadas.sql`. A migração cria a proteção contra duas
-aulas ativas do mesmo aluno no mesmo horário. Ela não apaga registros: caso já existam
-duplicidades, interrompe a execução para que elas sejam revisadas antes de criar o índice.
+Antes de publicar esta versão sobre um banco PostgreSQL existente, execute, em ordem,
+`migrations/002_prevenir_aulas_duplicadas.sql` e
+`migrations/003_rastrear_whatsapp_ycloud.sql`. A primeira cria a proteção contra duas
+aulas ativas do mesmo aluno no mesmo horário. A segunda adiciona o rastreamento de
+mensagens e a deduplicação dos webhooks da YCloud. Nenhuma delas remove dados.
+
+O procedimento de criação da conta, aprovação dos templates, webhook, teste e troca sem
+interromper o número está em `docs/ycloud-coexistence.md`.
 
 Depois configure as variáveis de ambiente, gere o frontend e inicie o FastAPI.
 

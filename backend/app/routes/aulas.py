@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from app.auth import verificar_token
-from app.services.whatsapp import enviar_whatsapp
+from app.services.notificacoes_whatsapp import enviar_notificacao_background
 from app.database import get_db # Removido SessionLocal daqui
 from app.services.agenda_background import sincronizar_evento_aulas
 from app.services.google_calendar import remover_evento_google
@@ -172,7 +172,23 @@ def marcar_aula(
             if prof_nome:
                 msg_confirmacao += f"\n👨‍🏫 Professor(a): {prof_nome}"
 
-            background_tasks.add_task(enviar_whatsapp, aula_criada.aluno.telefone, msg_confirmacao)
+            detalhes = "Aula de reposição" if eh_reposicao else "Aula regular"
+            background_tasks.add_task(
+                enviar_notificacao_background,
+                external_id=f"aula:{aula_criada.id}:confirmacao-agendamento",
+                numero=aula_criada.aluno.telefone,
+                tipo="aula_agendada",
+                parametros=[
+                    aula_criada.aluno.nome,
+                    aula_criada.data_inicio.strftime('%d/%m'),
+                    aula_criada.data_inicio.strftime('%H:%M'),
+                    detalhes,
+                    prof_nome or "A definir",
+                ],
+                mensagem_fallback=msg_confirmacao,
+                aluno_id=aula_criada.aluno.id,
+                aula_id=aula_criada.id,
+            )
 
         return {"status": "sucesso", "google_sync_pending": True}
 
@@ -412,7 +428,26 @@ def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, d
     else:
         msg += "\n❌ Sem direito a reposição (cancelamento tardio)."
     
-    background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg)
+    resultado_cancelamento = (
+        "Crédito de reposição gerado, válido até " + validade_formatada
+        if gera_reposicao
+        else "Cancelamento tardio, sem crédito de reposição"
+    )
+    background_tasks.add_task(
+        enviar_notificacao_background,
+        external_id=f"aula:{aula.id}:cancelamento-aluno",
+        numero=aluno.telefone,
+        tipo="aula_cancelada",
+        parametros=[
+            aluno.nome,
+            aula.data_inicio.strftime('%d/%m às %H:%M'),
+            resultado_cancelamento,
+            link_portal,
+        ],
+        mensagem_fallback=msg,
+        aluno_id=aluno.id,
+        aula_id=aula.id,
+    )
 
     # Notificação para o professor
     msg_professor = (
@@ -422,7 +457,20 @@ def cancelar_aula(aula_id: int, token: str, background_tasks: BackgroundTasks, d
         f"{'✅ Crédito de reposição gerado.' if gera_reposicao else '❌ Sem direito a reposição (cancelamento tardio).'}"
     )
     if TELEFONE_PROFESSOR:
-        background_tasks.add_task(enviar_whatsapp, TELEFONE_PROFESSOR, msg_professor)
+        background_tasks.add_task(
+            enviar_notificacao_background,
+            external_id=f"aula:{aula.id}:cancelamento-professor",
+            numero=TELEFONE_PROFESSOR,
+            tipo="cancelamento_professor",
+            parametros=[
+                f"{aluno.nome} {aluno.sobrenome or ''}".strip(),
+                aula.data_inicio.strftime('%d/%m às %H:%M'),
+                resultado_cancelamento,
+            ],
+            mensagem_fallback=msg_professor,
+            aluno_id=aluno.id,
+            aula_id=aula.id,
+        )
 
     return {"status": "sucesso", "creditos": aluno.creditos_reposicao}
 

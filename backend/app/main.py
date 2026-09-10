@@ -8,7 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.database import Base, engine
 from app.core.paths import FRONTEND_ASSETS_DIR, FRONTEND_STATIC_DIR
-from app.routes import alunos, aulas, webhook, turmas, auth, portal, relatorios, professores
+from app.routes import alunos, aulas, webhook, turmas, auth, portal, relatorios, professores, integracoes
 from app.services import lembretes
 from app.services.lembretes import verificar_lembretes_background
 from app.services.gerar_agenda import gerar_aulas_da_semana
@@ -22,10 +22,10 @@ scheduler.add_job(gerar_aulas_da_semana, 'cron', day_of_week='mon', hour=0, minu
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Sistema Agenda SaaS Iniciado")
+    # O esquema precisa existir antes que o primeiro job possa acessar as tabelas.
+    Base.metadata.create_all(bind=engine)
     if not scheduler.running:
         scheduler.start()
-    # Cria as tabelas ao iniciar se não existirem
-    Base.metadata.create_all(bind=engine)
     yield
     print("🛑 Sistema Encerrado")
     if scheduler.running:
@@ -50,3 +50,4 @@ app.include_router(webhook.router)
 app.include_router(lembretes.router)
 app.include_router(relatorios.router)
 app.include_router(professores.router)
+app.include_router(integracoes.router)

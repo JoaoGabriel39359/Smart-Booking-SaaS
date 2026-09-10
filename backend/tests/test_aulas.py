@@ -193,9 +193,9 @@ def test_cancelar_aula_com_reposicao(client, db_session, mock_whatsapp):
     # Deve enviar duas mensagens de WhatsApp (uma para o aluno, outra para o professor)
     assert mock_whatsapp.call_count >= 1
     
-    # Verifica chamadas do WhatsApp
-    chamadas = [call[0] for call in mock_whatsapp.call_args_list]
-    telefones_chamados = [c[0] for c in chamadas]
+    telefones_chamados = [
+        chamada.kwargs["numero"] for chamada in mock_whatsapp.call_args_list
+    ]
     assert "5511999999999" in telefones_chamados
 
 def test_cancelar_aula_sem_reposicao(client, db_session, mock_whatsapp):
@@ -231,8 +231,9 @@ def test_cancelar_aula_sem_reposicao(client, db_session, mock_whatsapp):
     assert aluno.creditos_reposicao == 0
 
     assert mock_whatsapp.call_count >= 1
-    chamadas = [call[0] for call in mock_whatsapp.call_args_list]
-    telefones_chamados = [c[0] for c in chamadas]
+    telefones_chamados = [
+        chamada.kwargs["numero"] for chamada in mock_whatsapp.call_args_list
+    ]
     assert "5511888888888" in telefones_chamados
 
 

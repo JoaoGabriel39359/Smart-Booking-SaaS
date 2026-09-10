@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import verificar_token
 from app.models import Aluno, Aula, HistoricoAula, Turma, StatusAula
-from app.core.config import BASE_URL
-from app.services.whatsapp import enviar_whatsapp
+from app.core.config import BASE_URL, agora_br
+from app.services.notificacoes_whatsapp import enviar_notificacao_rastreada
 from app.services.creditos import ajustar_creditos_manualmente
 from .schemas import AlunoCreate, AlunoEdit
 
@@ -250,9 +250,24 @@ def enviar_link_portal_whatsapp(
         f"{link}\n\n"
         "Por lá você pode consultar suas aulas e agendar reposições."
     )
-    if not enviar_whatsapp(aluno.telefone, mensagem):
+    resultado = enviar_notificacao_rastreada(
+        db,
+        external_id=f"aluno:{aluno.id}:link-portal:{agora_br().strftime('%Y%m%d')}",
+        numero=aluno.telefone,
+        tipo="link_portal",
+        parametros=[aluno.nome, link],
+        mensagem_fallback=mensagem,
+        aluno_id=aluno.id,
+    )
+    if not resultado:
         raise HTTPException(
             status_code=502,
-            detail="A Evolution não aceitou a mensagem. Verifique se a instância configurada existe e está conectada.",
+            detail=(
+                "O provedor do WhatsApp não aceitou a mensagem. "
+                f"Código: {resultado.erro_codigo or 'desconhecido'}."
+            ),
         )
-    return {"status": "enviado", "mensagem": "Link enviado pelo WhatsApp."}
+    return {
+        "status": resultado.status,
+        "mensagem": "Link aceito pelo provedor do WhatsApp.",
+    }

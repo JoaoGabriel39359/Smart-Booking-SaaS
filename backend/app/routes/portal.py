@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.database import get_db
 from app.services.google_calendar import criar_evento, remover_evento_google
-from app.services.whatsapp import enviar_whatsapp
+from app.services.notificacoes_whatsapp import enviar_notificacao_background
 from app.services.agendamento import duracao_aula_minutos
 from app.services.creditos import consumir_credito, sincronizar_contador_creditos
 from app.services.disponibilidade import resolver_grade_disponivel
@@ -144,6 +144,7 @@ async def reagendar_aula(
             )
             db.add(nova_aula)
             db.flush()
+            aula_notificada = nova_aula
             db.add(models.HistoricoAula(
                 aula_id=nova_aula.id,
                 aluno_id=aluno.id,
@@ -179,6 +180,8 @@ async def reagendar_aula(
             aula.data_fim = data_fim_dt
             aula.status = models.StatusAula.marcada
             aula.lembrete_enviado = False
+            aula.lembrete_10h_enviado = False
+            aula_notificada = aula
 
         db.commit()
         link_portal = f"{BASE_URL}/portal/{token}"
@@ -190,7 +193,23 @@ async def reagendar_aula(
             msg_reagendado += f"Reposição agendada com o professor {prof_nome}.\n"
         msg_reagendado += f"\nVeja seus horários no portal:\n{link_portal}"
 
-        background_tasks.add_task(enviar_whatsapp, aluno.telefone, msg_reagendado)
+        background_tasks.add_task(
+            enviar_notificacao_background,
+            external_id=(
+                f"aula:{aula_notificada.id}:reagendamento:"
+                f"{data_dt.strftime('%Y%m%dT%H%M')}"
+            ),
+            numero=aluno.telefone,
+            tipo="aula_reagendada",
+            parametros=[
+                aluno.nome,
+                data_dt.strftime('%d/%m às %H:%M'),
+                prof_nome or "A definir",
+            ],
+            mensagem_fallback=msg_reagendado,
+            aluno_id=aluno.id,
+            aula_id=aula_notificada.id,
+        )
 
         if "application/json" in request.headers.get("accept", ""):
             return {
