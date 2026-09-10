@@ -69,7 +69,9 @@ def resolver_grade_disponivel(
         )
     )
     if bloquear:
-        query = query.with_for_update()
+        # PostgreSQL rejeita FOR UPDATE na tabela opcional do LEFT JOIN.
+        # A concorrencia depende apenas da grade, entao bloqueamos suas linhas.
+        query = query.with_for_update(of=GradeProfessor)
 
     grades = query.all()
     grades.sort(key=lambda grade: grade.id != grade_id_preferida)

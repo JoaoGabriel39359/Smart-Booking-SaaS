@@ -1,5 +1,6 @@
 import pytest
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 from fastapi import BackgroundTasks, HTTPException
 
@@ -507,3 +508,21 @@ def test_envio_portal_bloqueia_link_local(db_session, monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert "URL pública" in exc_info.value.detail
+
+
+def test_resolver_grade_bloqueia_apenas_grade_no_postgresql():
+    db = MagicMock()
+    query = MagicMock()
+    db.query.return_value = query
+    query.outerjoin.return_value = query
+    query.filter.return_value = query
+    query.with_for_update.return_value = query
+    query.all.return_value = []
+    inicio = agora_br() + timedelta(days=1)
+
+    resultado = resolver_grade_disponivel(
+        db, inicio, inicio + timedelta(hours=1), bloquear=True,
+    )
+
+    assert resultado is None
+    query.with_for_update.assert_called_once_with(of=GradeProfessor)
