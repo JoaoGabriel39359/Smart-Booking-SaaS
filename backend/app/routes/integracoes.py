@@ -60,3 +60,25 @@ def status_whatsapp(
             for item in recentes
         ],
     }
+
+
+@router.post("/whatsapp/destravar")
+def destravar_mensagens_whatsapp(
+    db: Session = Depends(get_db),
+    usuario: str = Depends(verificar_token),
+):
+    del usuario
+    presas = db.query(MensagemWhatsApp).filter(
+        MensagemWhatsApp.aceito_em.is_(None),
+        MensagemWhatsApp.status.in_(["falhou", "processando", "desconhecido"]),
+    ).all()
+    count = 0
+    for item in presas:
+        item.status = "processando"
+        item.tentativas = 0
+        item.erro_codigo = None
+        item.erro_mensagem = None
+        count += 1
+    db.commit()
+    return {"status": "sucesso", "mensagens_destravadas": count}
+

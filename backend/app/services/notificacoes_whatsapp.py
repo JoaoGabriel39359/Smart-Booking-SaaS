@@ -11,7 +11,7 @@ from app.services.whatsapp import ResultadoEnvio, enviar_template_whatsapp, norm
 
 
 TEMPLATES_PADRAO = {
-    "lembrete_1h": ("lembrete_aula_1h_v1", "en_US"),
+    "lembrete_1h": ("lembrete_aula_1h_v1", "pt_BR"),
     "lembrete_24h": ("lembrete_aula_24h_v1", "pt_BR"),
     "link_portal": ("link_portal_aluno_v1", "pt_BR"),
     "aula_agendada": ("aula_agendada_v1", "pt_BR"),
@@ -67,10 +67,19 @@ def enviar_notificacao_rastreada(
         # entrega após "accepted" e falha de rede continuam bloqueadas para evitar
         # que uma resposta perdida gere duas mensagens para o aluno.
         max_tentativas = max(int(os.getenv("YCLOUD_MAX_SYNC_RETRIES", "3")), 1)
+        agora = datetime.now(timezone.utc).replace(tzinfo=None)
+        preso_processando = (
+            existente.status == "processando"
+            and existente.criado_em is not None
+            and (agora - existente.criado_em).total_seconds() > 120
+        )
         if (
-            existente.status == "falhou"
-            and existente.aceito_em is None
-            and existente.tentativas < max_tentativas
+            (
+                existente.status == "falhou"
+                and existente.aceito_em is None
+                and existente.tentativas < max_tentativas
+            )
+            or preso_processando
         ):
             registro = existente
             registro.status = "processando"

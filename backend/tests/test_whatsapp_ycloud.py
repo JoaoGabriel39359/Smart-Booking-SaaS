@@ -344,3 +344,37 @@ def test_job_de_lembrete_respeita_pausa_de_migracao(db_session, monkeypatch):
     db_session.refresh(aula)
     assert aula.lembrete_enviado is False
     assert db_session.query(MensagemWhatsApp).count() == 0
+
+
+def test_recupera_registro_preso_em_processando(db_session, monkeypatch):
+    enviar = MagicMock(return_value=_resultado())
+    monkeypatch.setattr(
+        "app.services.notificacoes_whatsapp.enviar_template_whatsapp",
+        enviar,
+    )
+    preso = MensagemWhatsApp(
+        external_id="aula:99:lembrete-1h",
+        provider="pendente",
+        tipo="lembrete_1h",
+        destinatario="5511988887777",
+        status="processando",
+        criado_em=datetime.now() - timedelta(minutes=5),
+        tentativas=1,
+    )
+    db_session.add(preso)
+    db_session.commit()
+
+    resultado = enviar_notificacao_rastreada(
+        db_session,
+        external_id="aula:99:lembrete-1h",
+        numero="5511988887777",
+        tipo="lembrete_1h",
+        parametros=["Ana", "13:00"],
+        mensagem_fallback="Lembrete",
+    )
+
+    assert resultado.aceito is True
+    db_session.refresh(preso)
+    assert preso.status == "accepted"
+    assert preso.tentativas == 2
+
